@@ -1,0 +1,8 @@
+{
+  "name": "LLM Multi-Model Tester",
+  "description": "A minimalist tool to test and compare outputs and metrics from multiple LLM models via Ollama or vLLM endpoints.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
