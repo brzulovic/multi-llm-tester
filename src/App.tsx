@@ -65,7 +65,7 @@ import { NetworkWaterfallPanel } from "./components/NetworkWaterfallPanel";
 import { DevToolsTimingDetail } from "./components/DevToolsTimingDetail";
 import { SupabaseConfigModal } from "./components/SupabaseConfigModal";
 import { ModelComparisonView } from "./components/ModelComparisonView";
-import { COMMON_TEST_PROMPTS } from "./data/prompts";
+import { COMMON_TEST_PROMPTS, NERDY_KINGS_PROMPTS, CLASSIC_TEST_PROMPTS } from "./data/prompts";
 import { convertHistoryToCSV, downloadCSV } from "./lib/csvExport";
 import {
   buildApiUrl,
@@ -1415,7 +1415,7 @@ export default function App() {
               title="Hide controls column"
             >
               <PanelLeftClose className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-semibold">Hide</span>
+              <span className="text-[11px] font-semibold"></span>
             </button>
           </div>
 
@@ -1938,11 +1938,20 @@ export default function App() {
                       className="text-[11px] font-medium h-6 py-0 px-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer max-w-[180px] sm:max-w-[210px] truncate transition-colors"
                     >
                       <option value="">Select prompt preset...</option>
-                      {COMMON_TEST_PROMPTS.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.title} - {p.subtitle}
-                        </option>
-                      ))}
+                      <optgroup label="👑 Prompts Nerdy Kings (18)">
+                        {NERDY_KINGS_PROMPTS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} - {p.subtitle}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="⚡ Classic Benchmarks (14)">
+                        {CLASSIC_TEST_PROMPTS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} - {p.subtitle}
+                          </option>
+                        ))}
+                      </optgroup>
                     </select>
                   </div>
 

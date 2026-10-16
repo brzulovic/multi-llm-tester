@@ -637,6 +637,21 @@ describe("LLM Multi-Tester App", () => {
     // Select Strawberry Test
     fireEvent.change(select, { target: { value: "strawberry" } });
     expect(promptTextarea.value).toContain("strawberry");
+
+    // Verify Nerdy Kings prompts are present
+    expect(screen.getByText(/1\. 🌐 Environnement Web \(OS\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Clone MacOS/i)).toBeInTheDocument();
+    expect(screen.getByText(/10\. FPS Doom-like/i)).toBeInTheDocument();
+    expect(screen.getByText(/14\. Simulateur Spaceship 3D/i)).toBeInTheDocument();
+    expect(screen.getByText(/15\. NerdyPocket Console/i)).toBeInTheDocument();
+
+    // Select Nerdy Kings prompt: FPS Doom-like
+    fireEvent.change(select, { target: { value: "nerdy-10-fps-doom" } });
+    expect(promptTextarea.value).toContain("DOOM");
+
+    // Select Nerdy Kings prompt: Clone MacOS
+    fireEvent.change(select, { target: { value: "nerdy-clone-macos" } });
+    expect(promptTextarea.value).toContain("MacOS");
   });
 
   it("switches to Model Comparison view and displays token diff side-by-side", async () => {
