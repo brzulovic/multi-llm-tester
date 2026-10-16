@@ -2,3 +2,201 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ==========================================================================
+   Custom Theme Styles: Sepia Light, Sepia Dark, Greenish Sepia
+   ========================================================================== */
+
+/* --- SEPIA LIGHT --- */
+.theme-sepia-light {
+  background-color: #f7f1e3 !important;
+  color: #382a1b !important;
+}
+
+.theme-sepia-light header,
+.theme-sepia-light .bg-white,
+.theme-sepia-light .dark\:bg-\[\#111622\] {
+  background-color: #fcf8ee !important;
+  border-color: #e4d8c2 !important;
+}
+
+.theme-sepia-light .bg-gray-50,
+.theme-sepia-light .dark\:bg-\[\#0b0f17\],
+.theme-sepia-light .dark\:bg-\[\#161c28\] {
+  background-color: #efe6d2 !important;
+  border-color: #dfd1b8 !important;
+}
+
+.theme-sepia-light .bg-gray-100,
+.theme-sepia-light .dark\:bg-gray-800 {
+  background-color: #e8dcc4 !important;
+  border-color: #dfd1b8 !important;
+}
+
+.theme-sepia-light .border-gray-100,
+.theme-sepia-light .border-gray-200,
+.theme-sepia-light .dark\:border-gray-800,
+.theme-sepia-light .dark\:border-gray-700 {
+  border-color: #e2d4bd !important;
+}
+
+.theme-sepia-light .text-gray-900,
+.theme-sepia-light .dark\:text-white,
+.theme-sepia-light .dark\:text-gray-100 {
+  color: #322416 !important;
+}
+
+.theme-sepia-light .text-gray-700,
+.theme-sepia-light .text-gray-800,
+.theme-sepia-light .dark\:text-gray-200,
+.theme-sepia-light .dark\:text-gray-300 {
+  color: #483827 !important;
+}
+
+.theme-sepia-light .text-gray-600,
+.theme-sepia-light .text-gray-500,
+.theme-sepia-light .text-gray-400,
+.theme-sepia-light .dark\:text-gray-400,
+.theme-sepia-light .dark\:text-gray-500 {
+  color: #79664f !important;
+}
+
+.theme-sepia-light .bg-indigo-600 {
+  background-color: #b45309 !important;
+}
+.theme-sepia-light .hover\:bg-indigo-700:hover {
+  background-color: #92400e !important;
+}
+.theme-sepia-light .text-indigo-600,
+.theme-sepia-light .dark\:text-indigo-400 {
+  color: #b45309 !important;
+}
+
+/* --- SEPIA DARK --- */
+.theme-sepia-dark {
+  background-color: #171310 !important;
+  color: #ede2d3 !important;
+}
+
+.theme-sepia-dark header,
+.theme-sepia-dark .bg-white,
+.theme-sepia-dark .dark\:bg-\[\#111622\] {
+  background-color: #231d18 !important;
+  border-color: #382e25 !important;
+}
+
+.theme-sepia-dark .bg-gray-50,
+.theme-sepia-dark .dark\:bg-\[\#0b0f17\],
+.theme-sepia-dark .dark\:bg-\[\#161c28\] {
+  background-color: #1b1612 !important;
+  border-color: #30261e !important;
+}
+
+.theme-sepia-dark .bg-gray-100,
+.theme-sepia-dark .dark\:bg-gray-800 {
+  background-color: #2b231d !important;
+  border-color: #3b3026 !important;
+}
+
+.theme-sepia-dark .border-gray-100,
+.theme-sepia-dark .border-gray-200,
+.theme-sepia-dark .dark\:border-gray-800,
+.theme-sepia-dark .dark\:border-gray-700 {
+  border-color: #3a2f26 !important;
+}
+
+.theme-sepia-dark .text-gray-900,
+.theme-sepia-dark .dark\:text-white,
+.theme-sepia-dark .dark\:text-gray-100 {
+  color: #f5ebe0 !important;
+}
+
+.theme-sepia-dark .text-gray-700,
+.theme-sepia-dark .text-gray-800,
+.theme-sepia-dark .dark\:text-gray-200,
+.theme-sepia-dark .dark\:text-gray-300 {
+  color: #d8cabe !important;
+}
+
+.theme-sepia-dark .text-gray-600,
+.theme-sepia-dark .text-gray-500,
+.theme-sepia-dark .text-gray-400,
+.theme-sepia-dark .dark\:text-gray-400,
+.theme-sepia-dark .dark\:text-gray-500 {
+  color: #9d8c7c !important;
+}
+
+.theme-sepia-dark .bg-indigo-600 {
+  background-color: #d97706 !important;
+}
+.theme-sepia-dark .hover\:bg-indigo-700:hover {
+  background-color: #b45309 !important;
+}
+.theme-sepia-dark .text-indigo-600,
+.theme-sepia-dark .dark\:text-indigo-400 {
+  color: #f59e0b !important;
+}
+
+/* --- GREENISH SEPIA --- */
+.theme-sepia-green {
+  background-color: #eff3ea !important;
+  color: #283626 !important;
+}
+
+.theme-sepia-green header,
+.theme-sepia-green .bg-white,
+.theme-sepia-green .dark\:bg-\[\#111622\] {
+  background-color: #f8faf5 !important;
+  border-color: #d6ded0 !important;
+}
+
+.theme-sepia-green .bg-gray-50,
+.theme-sepia-green .dark\:bg-\[\#0b0f17\],
+.theme-sepia-green .dark\:bg-\[\#161c28\] {
+  background-color: #e4ece0 !important;
+  border-color: #cbdbcb !important;
+}
+
+.theme-sepia-green .bg-gray-100,
+.theme-sepia-green .dark\:bg-gray-800 {
+  background-color: #dae5d4 !important;
+  border-color: #cbdbcb !important;
+}
+
+.theme-sepia-green .border-gray-100,
+.theme-sepia-green .border-gray-200,
+.theme-sepia-green .dark\:border-gray-800,
+.theme-sepia-green .dark\:border-gray-700 {
+  border-color: #d2ddd0 !important;
+}
+
+.theme-sepia-green .text-gray-900,
+.theme-sepia-green .dark\:text-white,
+.theme-sepia-green .dark\:text-gray-100 {
+  color: #202d1e !important;
+}
+
+.theme-sepia-green .text-gray-700,
+.theme-sepia-green .text-gray-800,
+.theme-sepia-green .dark\:text-gray-200,
+.theme-sepia-green .dark\:text-gray-300 {
+  color: #354633 !important;
+}
+
+.theme-sepia-green .text-gray-600,
+.theme-sepia-green .text-gray-500,
+.theme-sepia-green .text-gray-400,
+.theme-sepia-green .dark\:text-gray-400,
+.theme-sepia-green .dark\:text-gray-500 {
+  color: #5c6f5a !important;
+}
+
+.theme-sepia-green .bg-indigo-600 {
+  background-color: #3a6b35 !important;
+}
+.theme-sepia-green .hover\:bg-indigo-700:hover {
+  background-color: #2d5529 !important;
+}
+.theme-sepia-green .text-indigo-600,
+.theme-sepia-green .dark\:text-indigo-400 {
+  color: #3a6b35 !important;
+}

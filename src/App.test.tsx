@@ -12,12 +12,25 @@ describe("LLM Multi-Tester App", () => {
     expect(screen.getByText("LLM Multi-Tester")).toBeInTheDocument();
   });
 
-  it("allows changing the API endpoint", () => {
+  it("allows changing the Custom Proxy Base URL and Endpoint Type", () => {
     render(<App />);
-    const endpointInput = screen.getByPlaceholderText("http://localhost:4100/v1/chat/completions") as HTMLInputElement;
-    expect(endpointInput.value).toBe("http://localhost:4100/v1/chat/completions");
-    fireEvent.change(endpointInput, { target: { value: "http://test-api.com" } });
-    expect(endpointInput.value).toBe("http://test-api.com");
+    const proxyBaseInput = screen.getByPlaceholderText("http://localhost:4100/") as HTMLInputElement;
+    expect(proxyBaseInput.value).toBe("http://localhost:4100/");
+    
+    // Check Endpoint Type select box has options
+    const endpointTypeSelect = screen.getByTestId("endpoint-type-select") as HTMLSelectElement;
+    expect(endpointTypeSelect.value).toBe("/v1/chat/completions");
+
+    // Change Custom Proxy Base URL
+    fireEvent.change(proxyBaseInput, { target: { value: "http://test-api.com/" } });
+    expect(proxyBaseInput.value).toBe("http://test-api.com/");
+
+    // Change Endpoint Type to /v1/responses
+    fireEvent.change(endpointTypeSelect, { target: { value: "/v1/responses" } });
+    expect(endpointTypeSelect.value).toBe("/v1/responses");
+
+    // Target display updates
+    expect(screen.getByTestId("target-endpoint-display").textContent).toBe("http://test-api.com/v1/responses");
   });
 
   it("allows changing the model list", () => {
@@ -417,18 +430,18 @@ describe("LLM Multi-Tester App", () => {
   it("toggles API Endpoint and Custom Headers fields when clicking on their labels", () => {
     render(<App />);
 
-    // API Endpoint input is initially visible
-    const endpointInput = screen.getByPlaceholderText("http://localhost:4100/v1/chat/completions");
+    // Custom Proxy Base URL input is initially visible
+    const endpointInput = screen.getByPlaceholderText("http://localhost:4100/");
     expect(endpointInput).toBeInTheDocument();
 
     // Click API Endpoint label to toggle closed
     const endpointLabel = screen.getByText("API Endpoint");
     fireEvent.click(endpointLabel);
-    expect(screen.queryByPlaceholderText("http://localhost:4100/v1/chat/completions")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("http://localhost:4100/")).not.toBeInTheDocument();
 
     // Click again to toggle open
     fireEvent.click(endpointLabel);
-    expect(screen.getByPlaceholderText("http://localhost:4100/v1/chat/completions")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("http://localhost:4100/")).toBeInTheDocument();
 
     // Custom Headers textarea is initially visible
     const headersTextarea = screen.getByPlaceholderText("x-litellm-api-key: Bearer sk-1234");
@@ -797,6 +810,118 @@ describe("LLM Multi-Tester App", () => {
     // Verify success banner/status notification appears
     expect(screen.getByText(/Exported benchmark data to CSV successfully!/i)).toBeInTheDocument();
     expect(downloadedFilename).toContain(".csv");
+  });
+
+  it("supports sort ordering (A-Z and Z-A) for model list and replaces RANDOM ORDER text with sort icon", () => {
+    render(<App />);
+
+    const modelListTextarea = screen.getByPlaceholderText(/myGemma3/i) as HTMLTextAreaElement;
+    fireEvent.change(modelListTextarea, { target: { value: "zebra\napple\nmango\nbanana" } });
+
+    // Verify the visible text "RANDOM ORDER" is NOT rendered in the document
+    expect(screen.queryByText("Random Order")).not.toBeInTheDocument();
+    expect(screen.queryByText("RANDOM ORDER")).not.toBeInTheDocument();
+
+    // Verify Sort A-Z button sorts models ascending
+    const sortAscBtn = screen.getByTestId("sort-models-asc-btn");
+    expect(sortAscBtn).toBeInTheDocument();
+    fireEvent.click(sortAscBtn);
+    expect(modelListTextarea.value).toBe("apple\nbanana\nmango\nzebra");
+
+    // Verify Sort Z-A button sorts models descending
+    const sortDescBtn = screen.getByTestId("sort-models-desc-btn");
+    expect(sortDescBtn).toBeInTheDocument();
+    fireEvent.click(sortDescBtn);
+    expect(modelListTextarea.value).toBe("zebra\nmango\nbanana\napple");
+
+    // Verify Random Order icon button is still present and accessible
+    const randomOrderBtn = screen.getByTestId("random-order-btn");
+    expect(randomOrderBtn).toBeInTheDocument();
+  });
+
+  it("supports switching to sepia light, sepia dark, and greenish sepia themes", () => {
+    render(<App />);
+
+    const themeToggleBtn = screen.getByTestId("theme-toggle-btn");
+    expect(themeToggleBtn).toBeInTheDocument();
+
+    // Open theme menu
+    fireEvent.click(themeToggleBtn);
+
+    // Verify options are present: Sepia Light, Sepia Dark, Greenish Sepia
+    const sepiaLightOpt = screen.getByTestId("theme-option-sepia-light");
+    const sepiaDarkOpt = screen.getByTestId("theme-option-sepia-dark");
+    const sepiaGreenOpt = screen.getByTestId("theme-option-sepia-green");
+
+    expect(sepiaLightOpt).toBeInTheDocument();
+    expect(sepiaDarkOpt).toBeInTheDocument();
+    expect(sepiaGreenOpt).toBeInTheDocument();
+
+    // Select Sepia Light
+    fireEvent.click(sepiaLightOpt);
+    expect(document.documentElement.classList.contains("theme-sepia-light")).toBe(true);
+
+    // Reopen menu and select Sepia Dark
+    fireEvent.click(themeToggleBtn);
+    fireEvent.click(screen.getByTestId("theme-option-sepia-dark"));
+    expect(document.documentElement.classList.contains("theme-sepia-dark")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+
+    // Reopen menu and select Greenish Sepia
+    fireEvent.click(themeToggleBtn);
+    fireEvent.click(screen.getByTestId("theme-option-sepia-green"));
+    expect(document.documentElement.classList.contains("theme-sepia-green")).toBe(true);
+  });
+
+  it("supports API Base URL presets, adding new API presets, and all endpoint types", () => {
+    render(<App />);
+
+    // Check API Base URL presets
+    const ollamaPreset = screen.getByTestId("preset-ollama");
+    expect(ollamaPreset).toBeInTheDocument();
+    fireEvent.click(ollamaPreset);
+
+    // Proxy Base URL input should update to Ollama
+    const proxyInput = screen.getByTestId("custom-proxy-base-url-input") as HTMLInputElement;
+    expect(proxyInput.value).toBe("http://localhost:11434/");
+
+    // Check target endpoint display has updated
+    expect(screen.getByTestId("target-endpoint-display").textContent).toBe("http://localhost:11434/v1/chat/completions");
+
+    // Add API base URL via Add API form
+    const addApiBtn = screen.getByTestId("add-api-btn");
+    fireEvent.click(addApiBtn);
+
+    const nameInput = screen.getByTestId("new-api-name-input");
+    const urlInput = screen.getByTestId("new-api-url-input");
+    fireEvent.change(nameInput, { target: { value: "Custom Proxy" } });
+    fireEvent.change(urlInput, { target: { value: "http://192.168.1.100:5000/" } });
+
+    const saveBtn = screen.getByTestId("save-new-api-btn");
+    fireEvent.click(saveBtn);
+
+    // Verify proxy input updated to the newly added API
+    expect(proxyInput.value).toBe("http://192.168.1.100:5000/");
+
+    // Select Endpoint Type: /v1/embeddings
+    const endpointTypeSelect = screen.getByTestId("endpoint-type-select") as HTMLSelectElement;
+    fireEvent.change(endpointTypeSelect, { target: { value: "/v1/embeddings" } });
+    expect(screen.getByTestId("target-endpoint-display").textContent).toBe("http://192.168.1.100:5000/v1/embeddings");
+
+    // Select Endpoint Type: /v1/audio/speech
+    fireEvent.change(endpointTypeSelect, { target: { value: "/v1/audio/speech" } });
+    expect(screen.getByTestId("target-endpoint-display").textContent).toBe("http://192.168.1.100:5000/v1/audio/speech");
+
+    // Select Custom endpoint
+    fireEvent.change(endpointTypeSelect, { target: { value: "custom" } });
+    const customPathInput = screen.getByTestId("custom-endpoint-path-input");
+    fireEvent.change(customPathInput, { target: { value: "/v1/custom/test" } });
+    expect(screen.getByTestId("target-endpoint-display").textContent).toBe("http://192.168.1.100:5000/v1/custom/test");
+
+    // Test copy button
+    const copyBtn = screen.getByTestId("copy-endpoint-btn");
+    expect(copyBtn).toBeInTheDocument();
+    fireEvent.click(copyBtn);
   });
 });
 

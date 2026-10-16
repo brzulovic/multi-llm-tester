@@ -49,7 +49,15 @@ import {
   Database,
   GitCompare,
   Sparkles,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Coffee,
+  Leaf,
+  BookOpen,
+  Check,
+  Server,
+  Globe
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -59,39 +67,175 @@ import { SupabaseConfigModal } from "./components/SupabaseConfigModal";
 import { ModelComparisonView } from "./components/ModelComparisonView";
 import { COMMON_TEST_PROMPTS } from "./data/prompts";
 import { convertHistoryToCSV, downloadCSV } from "./lib/csvExport";
+import {
+  buildApiUrl,
+  parseApiUrl,
+  ENDPOINT_TYPES,
+  DEFAULT_API_PRESETS,
+  ApiPreset
+} from "./lib/apiUrl";
 import { 
   insertBenchmarkRunToSupabase, 
   getSupabaseConfig, 
   isSupabaseConfigured 
 } from "./lib/supabase";
 
+export type ThemeMode = 'light' | 'dark' | 'sepia-light' | 'sepia-dark' | 'sepia-green';
+
+export const THEME_OPTIONS: { id: ThemeMode; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'dark', label: 'Dark', icon: Moon },
+  { id: 'sepia-light', label: 'Sepia Light', icon: BookOpen },
+  { id: 'sepia-dark', label: 'Sepia Dark', icon: Coffee },
+  { id: 'sepia-green', label: 'Greenish Sepia', icon: Leaf },
+];
+
 export default function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("llm_tester_theme");
-      if (saved === "dark" || saved === "light") return saved;
+      const saved = localStorage.getItem("llm_tester_theme") as ThemeMode | null;
+      if (saved && ['light', 'dark', 'sepia-light', 'sepia-dark', 'sepia-green'].includes(saved)) {
+        return saved;
+      }
       if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
     }
     return "light";
   });
 
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "dark") {
+    root.classList.remove("dark", "theme-light", "theme-dark", "theme-sepia-light", "theme-sepia-dark", "theme-sepia-green");
+    root.classList.add(`theme-${theme}`);
+    if (theme === "dark" || theme === "sepia-dark") {
       root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
     }
     try {
       localStorage.setItem("llm_tester_theme", theme);
     } catch {}
   }, [theme]);
 
+  // Close theme menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    if (isThemeMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isThemeMenuOpen]);
+
   const toggleTheme = () => {
-    setTheme(prev => (prev === "light" ? "dark" : "light"));
+    const currentIndex = THEME_OPTIONS.findIndex(t => t.id === theme);
+    const nextIndex = (currentIndex + 1) % THEME_OPTIONS.length;
+    setTheme(THEME_OPTIONS[nextIndex].id);
   };
 
-  const [endpoint, setEndpoint] = useState("http://localhost:4100/v1/chat/completions");
+  const [proxyBaseUrl, setProxyBaseUrl] = useState<string>(() => {
+    return localStorage.getItem("benchmark_proxy_base_url") || "http://localhost:4100/";
+  });
+  const [endpointType, setEndpointType] = useState<string>(() => {
+    return localStorage.getItem("benchmark_endpoint_type") || "/v1/chat/completions";
+  });
+  const [customEndpointPath, setCustomEndpointPath] = useState<string>("");
+  const [apiPresets, setApiPresets] = useState<ApiPreset[]>(() => {
+    try {
+      const saved = localStorage.getItem("benchmark_api_presets");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to load saved API presets", e);
+    }
+    return DEFAULT_API_PRESETS;
+  });
+  const [showAddApiModal, setShowAddApiModal] = useState<boolean>(false);
+  const [newApiName, setNewApiName] = useState<string>("");
+  const [newApiUrl, setNewApiUrl] = useState<string>("");
+  const [copiedEndpoint, setCopiedEndpoint] = useState<boolean>(false);
+
+  const endpoint = buildApiUrl(proxyBaseUrl, endpointType, customEndpointPath);
+
+  const setEndpoint = (newFullUrl: string) => {
+    if (!newFullUrl) return;
+    const parsed = parseApiUrl(newFullUrl);
+    setProxyBaseUrl(parsed.baseUrl);
+    setEndpointType(parsed.endpointType);
+    if (parsed.customPath) {
+      setCustomEndpointPath(parsed.customPath);
+    } else {
+      setCustomEndpointPath("");
+    }
+    try {
+      localStorage.setItem("benchmark_proxy_base_url", parsed.baseUrl);
+      localStorage.setItem("benchmark_endpoint_type", parsed.endpointType);
+    } catch (_) {}
+  };
+
+  const handleProxyBaseUrlChange = (newUrl: string) => {
+    setProxyBaseUrl(newUrl);
+    try {
+      localStorage.setItem("benchmark_proxy_base_url", newUrl);
+    } catch (_) {}
+  };
+
+  const handleEndpointTypeChange = (newType: string) => {
+    setEndpointType(newType);
+    try {
+      localStorage.setItem("benchmark_endpoint_type", newType);
+    } catch (_) {}
+  };
+
+  const selectApiPreset = (preset: ApiPreset) => {
+    setProxyBaseUrl(preset.baseUrl);
+    try {
+      localStorage.setItem("benchmark_proxy_base_url", preset.baseUrl);
+    } catch (_) {}
+  };
+
+  const handleAddApiPreset = () => {
+    if (!newApiUrl.trim()) return;
+    const trimmedUrl = newApiUrl.trim();
+    const formattedUrl = trimmedUrl.endsWith('/') ? trimmedUrl : `${trimmedUrl}/`;
+    const name = newApiName.trim() || formattedUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const newPreset: ApiPreset = {
+      id: `custom-${Date.now()}`,
+      name,
+      baseUrl: formattedUrl,
+      isCustom: true
+    };
+    const updated = [...apiPresets, newPreset];
+    setApiPresets(updated);
+    try {
+      localStorage.setItem("benchmark_api_presets", JSON.stringify(updated));
+      localStorage.setItem("benchmark_proxy_base_url", formattedUrl);
+    } catch (_) {}
+    setProxyBaseUrl(formattedUrl);
+    setNewApiName("");
+    setNewApiUrl("");
+    setShowAddApiModal(false);
+  };
+
+  const handleDeleteCustomPreset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = apiPresets.filter(p => p.id !== id);
+    setApiPresets(updated);
+    try {
+      localStorage.setItem("benchmark_api_presets", JSON.stringify(updated));
+    } catch (_) {}
+  };
+
+  const copyCombinedEndpoint = () => {
+    navigator.clipboard?.writeText(endpoint);
+    setCopiedEndpoint(true);
+    setTimeout(() => setCopiedEndpoint(false), 2000);
+  };
   const [customHeaders, setCustomHeaders] = useState("x-litellm-api-key: Bearer sk-1234");
   const [showEndpointField, setShowEndpointField] = useState<boolean>(true);
   const [showCustomHeadersField, setShowCustomHeadersField] = useState<boolean>(true);
@@ -247,8 +391,8 @@ export default function App() {
   const fetchModels = async () => {
     setIsFetchingModels(true);
     try {
-      // Derive models endpoint from chat completions endpoint
-      const modelsUrl = endpoint.replace(/chat\/completions\/?$/, "models");
+      // Derive models endpoint from proxy base URL or chat completions endpoint
+      const modelsUrl = buildApiUrl(proxyBaseUrl, "/v1/models") || endpoint.replace(/chat\/completions\/?$/, "models");
       
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -305,6 +449,19 @@ export default function App() {
     setModelList(remaining.join("\n"));
   };
 
+  const [modelSortOrder, setModelSortOrder] = useState<'none' | 'asc' | 'desc' | 'random'>('none');
+
+  const sortModelList = (direction: 'asc' | 'desc') => {
+    const models = modelList.split("\n").map(m => m.trim()).filter(Boolean);
+    if (models.length <= 1) return;
+    const sorted = [...models].sort((a, b) => {
+      const cmp = a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+      return direction === 'asc' ? cmp : -cmp;
+    });
+    setModelSortOrder(direction);
+    setModelList(sorted.join("\n"));
+  };
+
   const shuffleModelList = () => {
     const models = modelList.split("\n").map(m => m.trim()).filter(Boolean);
     if (models.length <= 1) return;
@@ -318,6 +475,7 @@ export default function App() {
     if (shuffled.every((m, idx) => m === models[idx])) {
       shuffled.reverse();
     }
+    setModelSortOrder('random');
     setModelList(shuffled.join("\n"));
   };
 
@@ -1036,44 +1194,40 @@ export default function App() {
     : null;
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'dark' : ''} bg-[#F8F9FA] dark:bg-[#0b0f17] text-[#1A1A1A] dark:text-[#E6EDF3] font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-200`}>
+    <div className={`min-h-screen theme-${theme} ${theme === 'dark' || theme === 'sepia-dark' ? 'dark' : ''} bg-[#F8F9FA] dark:bg-[#0b0f17] text-[#1A1A1A] dark:text-[#E6EDF3] font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-200`}>
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111622] sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-indigo-950">
-              <Layers className="text-white w-6 h-6" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200 dark:shadow-indigo-950">
+              <Layers className="text-white w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">LLM Multi-Tester</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">Sequential & Parallel Benchmarking</p>
+              <h1 className="text-lg font-bold tracking-tight text-gray-900 dark:text-white leading-tight">LLM Multi-Tester</h1>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Sequential & Parallel Benchmarking</p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={() => setShowLeftColumn(prev => !prev)}
               data-testid="toggle-left-column-btn"
-              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700"
+              className="flex items-center justify-center p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700 shadow-2xs"
               title={showLeftColumn ? "Hide configuration and prompt column" : "Show configuration and prompt column"}
+              aria-label={showLeftColumn ? "Hide configuration and prompt column" : "Show configuration and prompt column"}
             >
               {showLeftColumn ? (
                 <>
-                  <PanelLeftClose className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
-                  <span className="hidden sm:inline">Hide Controls</span>
+                  <PanelLeftClose className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  <span className="sr-only">Hide Controls</span>
                 </>
               ) : (
                 <>
-                  <PanelLeftOpen className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span className="text-indigo-600 dark:text-indigo-400 font-bold">Show Controls</span>
+                  <PanelLeftOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span className="sr-only">Show Controls</span>
                 </>
               )}
             </button>
-
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200/50 dark:border-gray-700/50">
-              <div className={`w-2 h-2 rounded-full ${isGenerating ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-              {isGenerating ? 'Processing...' : 'Ready'}
-            </div>
 
             {/* Supabase Database Integration Button */}
             <button
@@ -1082,42 +1236,103 @@ export default function App() {
               data-testid="supabase-config-btn"
               aria-label="Open Supabase database settings"
               title={isSupabaseConfigured() ? "Supabase: Configured (click to configure/sync)" : "Supabase: Click to configure database connection"}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700"
+              className="relative flex items-center justify-center p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700 shadow-2xs"
             >
-              <Database className={`w-3.5 h-3.5 ${isSupabaseConfigured() ? 'text-emerald-500' : 'text-gray-400'}`} />
-              <span className="hidden sm:inline">Supabase</span>
+              <Database className={`w-4 h-4 ${isSupabaseConfigured() ? 'text-emerald-500' : 'text-gray-400'}`} />
+              <span className="sr-only">Supabase</span>
               {supabaseSyncStatus?.status === 'syncing' ? (
-                <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
+                <Loader2 className="w-2.5 h-2.5 animate-spin text-emerald-500 absolute -top-0.5 -right-0.5" />
               ) : isSupabaseConfigured() ? (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-0.5 -right-0.5 ring-2 ring-white dark:ring-[#111622]" />
               ) : null}
             </button>
 
-            {/* Small Theme Switcher Light/Dark in upper right corner */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              data-testid="theme-toggle-btn"
-              aria-label={theme === 'dark' ? "Switch to light mode" : "Switch to dark mode"}
-              title={theme === 'dark' ? "Switch to light mode" : "Switch to dark mode"}
-              className="flex items-center justify-center w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-200/70 dark:border-gray-700 transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+            {/* Theme Picker: Light, Dark, Sepia Light, Sepia Dark, Greenish Sepia */}
+            <div className="relative" ref={themeMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsThemeMenuOpen(prev => !prev)}
+                data-testid="theme-toggle-btn"
+                aria-label={`Theme: ${THEME_OPTIONS.find(t => t.id === theme)?.label || theme}. Click to choose theme.`}
+                title={`Theme: ${THEME_OPTIONS.find(t => t.id === theme)?.label || theme}`}
+                className="flex items-center gap-1 p-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200/70 dark:border-gray-700 transition-all cursor-pointer shadow-2xs text-xs font-bold"
+              >
+                {theme === 'light' && <Sun className="w-4 h-4 text-amber-500" />}
+                {theme === 'dark' && <Moon className="w-4 h-4 text-indigo-400" />}
+                {theme === 'sepia-light' && <BookOpen className="w-4 h-4 text-amber-700" />}
+                {theme === 'sepia-dark' && <Coffee className="w-4 h-4 text-amber-500" />}
+                {theme === 'sepia-green' && <Leaf className="w-4 h-4 text-emerald-600" />}
+                <span className="sr-only">
+                  {THEME_OPTIONS.find(t => t.id === theme)?.label}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${isThemeMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isThemeMenuOpen && (
+                <div 
+                  className="absolute right-0 mt-1.5 w-44 bg-white dark:bg-[#161c28] rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 text-xs"
+                  role="menu"
+                >
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                    Theme
+                  </div>
+                  {THEME_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isSelected = theme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setTheme(opt.id);
+                          setIsThemeMenuOpen(false);
+                        }}
+                        data-testid={`theme-option-${opt.id}`}
+                        className={`w-full flex items-center justify-between px-3 py-1.5 transition-colors cursor-pointer text-left text-xs ${
+                          isSelected 
+                            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 font-bold' 
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/60'
+                        }`}
+                        role="menuitem"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          <span>{opt.label}</span>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </button>
+            </div>
+
+            {/* Ready Status Indicator: Moved far right, icons/dot do the job */}
+            <div 
+              className="flex items-center justify-center p-2 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200/70 dark:border-gray-700 shadow-2xs"
+              title={isGenerating ? 'Processing benchmark runs...' : 'Ready to benchmark'}
+              aria-label={isGenerating ? 'Processing' : 'Ready'}
+              data-testid="status-indicator"
+            >
+              <div 
+                className={`w-2.5 h-2.5 rounded-full ${
+                  isGenerating 
+                    ? 'bg-amber-500 animate-pulse' 
+                    : 'bg-emerald-500 shadow-2xs shadow-emerald-400'
+                }`} 
+              />
+              <span className="sr-only">{isGenerating ? 'Processing...' : 'Ready'}</span>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
         {/* Sidebar Controls - Toggled View Column */}
         {showLeftColumn && (
-        <div className="lg:col-span-4 space-y-4">
+        <div className="lg:col-span-4 space-y-3">
           {/* Column View Section Switcher / Navigation */}
-          <div className="bg-white/95 dark:bg-[#111622]/95 rounded-2xl p-1.5 shadow-xs border border-gray-200/80 dark:border-gray-800 flex items-center gap-1 sticky top-[73px] z-10 backdrop-blur-sm">
+          <div className="bg-white/95 dark:bg-[#111622]/95 rounded-2xl p-1 shadow-xs border border-gray-200/80 dark:border-gray-800 flex items-center gap-1 sticky top-[58px] z-10 backdrop-blur-sm">
             <button 
               type="button"
               data-testid="tab-config"
@@ -1209,7 +1424,7 @@ export default function App() {
             <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
               <button 
                 onClick={() => toggleSection('config')}
-                className="w-full flex items-center justify-between p-6 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
               >
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -1225,12 +1440,12 @@ export default function App() {
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="px-6 pb-6 space-y-4 border-t border-gray-50 dark:border-gray-800/60 pt-4"
+                  className="px-4 pb-4 space-y-3 border-t border-gray-50 dark:border-gray-800/60 pt-3 sm:px-5 sm:pb-4"
                 >
                   <div>
                     <div 
                       onClick={() => setShowEndpointField(prev => !prev)}
-                      className="flex items-center justify-between cursor-pointer select-none mb-1.5 group"
+                      className="flex items-center justify-between cursor-pointer select-none mb-1 group"
                       role="button"
                       tabIndex={0}
                       aria-expanded={showEndpointField}
@@ -1251,15 +1466,173 @@ export default function App() {
                       </div>
                     </div>
                     {showEndpointField && (
-                      <div className="relative" data-testid="endpoint-input-container">
-                        <Terminal className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input 
-                          type="text" 
-                          value={endpoint}
-                          onChange={(e) => setEndpoint(e.target.value)}
-                          className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono"
-                          placeholder="http://localhost:4100/v1/chat/completions"
-                        />
+                      <div className="space-y-2.5 pt-1" data-testid="endpoint-input-container">
+                        {/* API Base URL presets row & Add API */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 flex items-center gap-1">
+                              <Server className="w-3.5 h-3.5 text-indigo-500" />
+                              <span>API Base URL</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowAddApiModal(prev => !prev)}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer"
+                              data-testid="add-api-btn"
+                              title="Add custom API Base URL"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Add API</span>
+                            </button>
+                          </div>
+
+                          {/* Quick API presets chips */}
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {apiPresets.map((preset) => {
+                              const isSelected = proxyBaseUrl.replace(/\/+$/, '') === preset.baseUrl.replace(/\/+$/, '');
+                              return (
+                                <div key={preset.id} className="inline-flex items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => selectApiPreset(preset)}
+                                    className={`px-2 py-0.5 text-[11px] font-medium rounded-lg transition-colors cursor-pointer border ${
+                                      isSelected
+                                        ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-600 text-indigo-700 dark:text-indigo-300 font-semibold'
+                                        : 'bg-white dark:bg-[#111622] border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                                    }`}
+                                    title={preset.baseUrl}
+                                    data-testid={`preset-${preset.id}`}
+                                  >
+                                    {preset.name}
+                                  </button>
+                                  {preset.isCustom && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteCustomPreset(preset.id, e)}
+                                      className="ml-0.5 text-gray-400 hover:text-red-500 p-0.5 rounded cursor-pointer"
+                                      title="Remove preset"
+                                    >
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Inline Add API Form */}
+                          {showAddApiModal && (
+                            <div className="p-2.5 mb-2 bg-gray-100/90 dark:bg-[#161c28] border border-gray-200 dark:border-gray-700 rounded-xl space-y-1.5 text-xs animate-in fade-in duration-150">
+                              <div className="text-[11px] font-semibold text-gray-700 dark:text-gray-200">Add API Base URL</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                <input
+                                  type="text"
+                                  placeholder="Name (e.g. Local vLLM)"
+                                  value={newApiName}
+                                  onChange={(e) => setNewApiName(e.target.value)}
+                                  className="px-2 py-1 bg-white dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-lg text-xs outline-none focus:border-indigo-500"
+                                  data-testid="new-api-name-input"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="http://localhost:8000/"
+                                  value={newApiUrl}
+                                  onChange={(e) => setNewApiUrl(e.target.value)}
+                                  className="px-2 py-1 bg-white dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-lg text-xs font-mono outline-none focus:border-indigo-500"
+                                  data-testid="new-api-url-input"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAddApiModal(false)}
+                                  className="px-2 py-0.5 text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleAddApiPreset}
+                                  className="px-2.5 py-0.5 text-[11px] font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 cursor-pointer"
+                                  data-testid="save-new-api-btn"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Custom Proxy Base URL input field */}
+                        <div>
+                          <label htmlFor="proxy-base-url-input" className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                            Custom Proxy Base URL
+                          </label>
+                          <div className="relative">
+                            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input 
+                              id="proxy-base-url-input"
+                              type="text" 
+                              value={proxyBaseUrl}
+                              onChange={(e) => handleProxyBaseUrlChange(e.target.value)}
+                              data-testid="custom-proxy-base-url-input"
+                              className="w-full pl-9 pr-3 py-1.5 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono"
+                              placeholder="http://localhost:4100/"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Endpoint Type Select Box */}
+                        <div>
+                          <label htmlFor="endpoint-type-select" className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                            Endpoint Type
+                          </label>
+                          <select
+                            id="endpoint-type-select"
+                            value={endpointType}
+                            onChange={(e) => handleEndpointTypeChange(e.target.value)}
+                            data-testid="endpoint-type-select"
+                            className="w-full px-3 py-1.5 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all font-mono cursor-pointer"
+                          >
+                            {ENDPOINT_TYPES.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label} ({opt.description})
+                              </option>
+                            ))}
+                          </select>
+                          {endpointType === 'custom' && (
+                            <div className="mt-1.5">
+                              <input
+                                type="text"
+                                value={customEndpointPath}
+                                onChange={(e) => setCustomEndpointPath(e.target.value)}
+                                placeholder="/v1/custom/endpoint"
+                                className="w-full px-3 py-1.5 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                                data-testid="custom-endpoint-path-input"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Combined Effective Target URL Preview */}
+                        <div className="flex items-center justify-between p-2 rounded-xl bg-gray-100/80 dark:bg-[#161c28]/80 border border-gray-200/60 dark:border-gray-700/60 text-xs">
+                          <div className="flex items-center gap-1.5 overflow-hidden min-w-0 mr-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">Target URL:</span>
+                            <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 truncate" title={endpoint} data-testid="target-endpoint-display">
+                              {endpoint}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={copyCombinedEndpoint}
+                            className="shrink-0 p-1 rounded-md text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                            title="Copy full target endpoint URL"
+                            aria-label="Copy full target endpoint URL"
+                            data-testid="copy-endpoint-btn"
+                          >
+                            {copiedEndpoint ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1267,7 +1640,7 @@ export default function App() {
                   <div>
                     <div 
                       onClick={() => setShowCustomHeadersField(prev => !prev)}
-                      className="flex items-center justify-between cursor-pointer select-none mb-1.5 group"
+                      className="flex items-center justify-between cursor-pointer select-none mb-1 group"
                       role="button"
                       tabIndex={0}
                       aria-expanded={showCustomHeadersField}
@@ -1292,39 +1665,76 @@ export default function App() {
                         value={customHeaders}
                         onChange={(e) => setCustomHeaders(e.target.value)}
                         data-testid="custom-headers-textarea"
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[80px] font-mono leading-relaxed"
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[64px] font-mono leading-relaxed"
                         placeholder="x-litellm-api-key: Bearer sk-1234"
                       />
                     )}
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between mb-1">
                       <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Model List (one per line)</label>
-                      <div className="flex items-center gap-2.5">
-                        <button 
-                          type="button"
-                          onClick={shuffleModelList}
-                          className="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider transition-colors cursor-pointer"
-                          title="Randomize / shuffle model list order"
-                        >
-                          <Shuffle className="w-3 h-3" />
-                          Random Order
-                        </button>
+                      <div className="flex items-center gap-1.5">
+                        {/* Sort Ordering Controls: A-Z, Z-A, and Shuffle */}
+                        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200/60 dark:border-gray-700/60" title="Sort ordering">
+                          <button
+                            type="button"
+                            onClick={() => sortModelList('asc')}
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              modelSortOrder === 'asc' 
+                                ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold' 
+                                : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                            }`}
+                            title="Sort models A-Z (Ascending)"
+                            aria-label="Sort models A to Z"
+                            data-testid="sort-models-asc-btn"
+                          >
+                            <ArrowDownAZ className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => sortModelList('desc')}
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              modelSortOrder === 'desc' 
+                                ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold' 
+                                : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                            }`}
+                            title="Sort models Z-A (Descending)"
+                            aria-label="Sort models Z to A"
+                            data-testid="sort-models-desc-btn"
+                          >
+                            <ArrowUpAZ className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={shuffleModelList}
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              modelSortOrder === 'random' 
+                                ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold' 
+                                : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                            }`}
+                            title="Random Order (Shuffle models)"
+                            aria-label="Random Order"
+                            data-testid="random-order-btn"
+                          >
+                            <Shuffle className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                         <button 
                           onClick={fetchModels}
                           disabled={isFetchingModels}
-                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer"
+                          className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer px-2 py-1 bg-indigo-50 dark:bg-indigo-950/40 rounded-lg border border-indigo-100 dark:border-indigo-900/40"
+                          title="Fetch available models from API endpoint"
                         >
                           {isFetchingModels ? <Loader2 className="w-3 h-3 animate-spin" /> : <List className="w-3 h-3" />}
-                          Fetch Models
+                          <span>Fetch Models</span>
                         </button>
                       </div>
                     </div>
                     <textarea 
                       value={modelList}
                       onChange={(e) => setModelList(e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[120px] font-mono leading-relaxed"
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[96px] font-mono leading-relaxed"
                       placeholder="free&#10;myGemma3&#10;myGroq"
                     />
                   </div>
@@ -1491,7 +1901,7 @@ export default function App() {
           <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
             <button 
               onClick={() => toggleSection('prompt')}
-              className="w-full flex items-center justify-between p-6 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
             >
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -1507,10 +1917,10 @@ export default function App() {
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="px-6 pb-6 border-t border-gray-50 dark:border-gray-800/60 pt-4"
+                  className="px-4 pb-4 border-t border-gray-50 dark:border-gray-800/60 pt-3 sm:px-5 sm:pb-4"
                 >
                   {/* Common LLM Testing Prompts selectbox */}
-                  <div className="flex items-center justify-end gap-1.5 mb-2">
+                  <div className="flex items-center justify-end gap-1.5 mb-1.5">
                     <Sparkles className="w-3 h-3 text-indigo-500 shrink-0" />
                     <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Presets:</span>
                     <select 
@@ -1525,7 +1935,7 @@ export default function App() {
                       }}
                       data-testid="common-prompts-select"
                       title="Select a common LLM testing prompt"
-                      className="text-[11px] font-medium h-6.5 py-0 px-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer max-w-[180px] sm:max-w-[210px] truncate transition-colors"
+                      className="text-[11px] font-medium h-6 py-0 px-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer max-w-[180px] sm:max-w-[210px] truncate transition-colors"
                     >
                       <option value="">Select prompt preset...</option>
                       {COMMON_TEST_PROMPTS.map((p) => (
@@ -1542,28 +1952,28 @@ export default function App() {
                       setPrompt(e.target.value);
                       if (selectedPresetId) setSelectedPresetId("");
                     }}
-                    className="w-full px-4 py-3 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[150px] leading-relaxed"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[110px] leading-relaxed"
                     placeholder="Enter your prompt here..."
                   />
-                  <div className="mt-6 flex gap-3">
+                  <div className="mt-3 flex gap-2">
                     <button 
                       onClick={generateResults}
                       disabled={isGenerating || !prompt.trim() || !modelList.trim()}
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-800 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-800 text-white font-bold py-2.5 px-4 rounded-xl shadow-md shadow-indigo-200 dark:shadow-indigo-950/50 transition-all flex items-center justify-center gap-2 group cursor-pointer text-xs sm:text-sm"
                     >
                       {isGenerating ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <Play className="w-4 h-4 group-hover:scale-110 transition-transform" />
                       )}
-                      Generate
+                      <span>Generate</span>
                     </button>
                     <button 
                       onClick={clearResults}
-                      className="p-3.5 bg-white dark:bg-[#161c28] border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-red-500 hover:border-red-100 dark:hover:border-red-900/60 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all rounded-xl cursor-pointer"
+                      className="p-2.5 bg-white dark:bg-[#161c28] border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-red-500 hover:border-red-100 dark:hover:border-red-900/60 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all rounded-xl cursor-pointer"
                       title="Clear Results"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </motion.div>
@@ -1577,7 +1987,7 @@ export default function App() {
           <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
             <button 
               onClick={() => toggleSection('history')}
-              className="w-full flex items-center justify-between p-6 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
+              className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
             >
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -1598,12 +2008,12 @@ export default function App() {
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="px-6 pb-6 border-t border-gray-50 dark:border-gray-800/60 pt-4"
+                  className="px-4 pb-4 border-t border-gray-50 dark:border-gray-800/60 pt-3 sm:px-5 sm:pb-4"
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 mb-2.5">
                     <button 
                       onClick={exportHistory}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-50 dark:bg-[#161c28] hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 transition-all cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-gray-50 dark:bg-[#161c28] hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 transition-all cursor-pointer"
                       title="Export history configuration and runs as JSON"
                       data-testid="export-json-btn"
                     >
@@ -1613,7 +2023,7 @@ export default function App() {
                     <button 
                       type="button"
                       onClick={exportHistoryToCSV}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
                       title="Download benchmark data as CSV for spreadsheet software"
                       data-testid="export-csv-btn"
                     >
@@ -1623,7 +2033,7 @@ export default function App() {
                     <button 
                       type="button"
                       onClick={() => historyFileInputRef.current?.click()}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2 bg-gray-50 dark:bg-[#161c28] hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-200 dark:hover:border-indigo-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-gray-50 dark:bg-[#161c28] hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:border-indigo-200 dark:hover:border-indigo-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all cursor-pointer"
                       title="Browse JSON history file to import"
                       data-testid="import-json-btn"
                     >
@@ -1646,7 +2056,7 @@ export default function App() {
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
                     onClick={() => historyFileInputRef.current?.click()}
-                    className={`mb-3.5 border-2 border-dashed rounded-xl p-3.5 text-center cursor-pointer transition-all ${
+                    className={`mb-2.5 border-2 border-dashed rounded-xl p-2.5 text-center cursor-pointer transition-all ${
                       isDraggingOver 
                         ? 'border-indigo-500 bg-indigo-50/90 dark:bg-indigo-950/60 scale-[1.01]' 
                         : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 bg-gray-50/50 dark:bg-[#0b0f17]/50'
@@ -1829,10 +2239,10 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-3.5">
               {/* Results Top Bar & View Mode Switcher */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-100 dark:border-gray-800">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <h2 className="text-lg font-bold flex items-center gap-2 text-gray-900 dark:text-white">
                     {viewMode === "compare" ? "Comparison" : "Results"}
                     <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 text-[10px] font-black uppercase rounded-md">
@@ -2330,15 +2740,41 @@ export default function App() {
                       <Square className="w-3.5 h-3.5" />
                       Unselect All
                     </button>
-                    <button
-                      type="button"
-                      onClick={shuffleModelList}
-                      className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer text-xs"
-                      title="Randomize / shuffle the order of selected models"
-                    >
-                      <Shuffle className="w-3.5 h-3.5" />
-                      Random Order
-                    </button>
+                    <div className="flex items-center bg-gray-100 rounded-lg p-0.5" title="Sort ordering">
+                      <button
+                        type="button"
+                        onClick={() => sortModelList('asc')}
+                        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                          modelSortOrder === 'asc' ? 'bg-white text-indigo-600 shadow-2xs font-bold' : 'text-gray-500 hover:text-indigo-600'
+                        }`}
+                        title="Sort models A-Z (Ascending)"
+                        aria-label="Sort models A to Z"
+                      >
+                        <ArrowDownAZ className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => sortModelList('desc')}
+                        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                          modelSortOrder === 'desc' ? 'bg-white text-indigo-600 shadow-2xs font-bold' : 'text-gray-500 hover:text-indigo-600'
+                        }`}
+                        title="Sort models Z-A (Descending)"
+                        aria-label="Sort models Z to A"
+                      >
+                        <ArrowUpAZ className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={shuffleModelList}
+                        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                          modelSortOrder === 'random' ? 'bg-white text-indigo-600 shadow-2xs font-bold' : 'text-gray-500 hover:text-indigo-600'
+                        }`}
+                        title="Random Order (Shuffle models)"
+                        aria-label="Random Order"
+                      >
+                        <Shuffle className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
