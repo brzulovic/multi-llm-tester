@@ -58,7 +58,8 @@ import {
   Check,
   Server,
   Globe,
-  Filter
+  Filter,
+  TrendingUp
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -66,6 +67,8 @@ import { NetworkWaterfallPanel } from "./components/NetworkWaterfallPanel";
 import { DevToolsTimingDetail } from "./components/DevToolsTimingDetail";
 import { SupabaseConfigModal } from "./components/SupabaseConfigModal";
 import { ModelComparisonView } from "./components/ModelComparisonView";
+import { ModelXYGraph } from "./components/ModelXYGraph";
+import { DocumentationModal } from "./components/DocumentationModal";
 import { COMMON_TEST_PROMPTS, NERDY_KINGS_PROMPTS, CLASSIC_TEST_PROMPTS } from "./data/prompts";
 import { convertHistoryToCSV, downloadCSV } from "./lib/csvExport";
 import {
@@ -252,7 +255,7 @@ export default function App() {
   const [modelSearch, setModelSearch] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [viewMode, setViewMode] = useState<"split" | "waterfall" | "cards" | "compare">("split");
+  const [viewMode, setViewMode] = useState<"split" | "waterfall" | "cards" | "compare" | "graph">("split");
   const [comparisonModelAId, setComparisonModelAId] = useState<string | undefined>();
   const [comparisonModelBId, setComparisonModelBId] = useState<string | undefined>();
   const [selectedPresetId, setSelectedPresetId] = useState<string>("");
@@ -265,6 +268,33 @@ export default function App() {
   const historyFileInputRef = useRef<HTMLInputElement>(null);
   const sessionStartTimeRef = useRef<number>(0);
 
+  // Custom System Prompt configuration & model-specific injection
+  const [customSystemPrompt, setCustomSystemPrompt] = useState<string>(
+    "You are an expert AI assistant. Provide concise, high-accuracy responses following system directives."
+  );
+  const [enableSystemPrompt, setEnableSystemPrompt] = useState<boolean>(false);
+  const [systemPromptMode, setSystemPromptMode] = useState<'specific' | 'all'>('specific');
+  const [systemPromptTargetModels, setSystemPromptTargetModels] = useState<string[]>([]);
+  const [showSystemPromptField, setShowSystemPromptField] = useState<boolean>(false);
+
+  const configuredModels = React.useMemo(() => {
+    return modelList
+      .split("\n")
+      .map(m => m.trim())
+      .filter(Boolean);
+  }, [modelList]);
+
+  const toggleSystemPromptModel = (model: string) => {
+    setSystemPromptTargetModels(prev => {
+      const exists = prev.some(m => m.toLowerCase() === model.toLowerCase());
+      if (exists) {
+        return prev.filter(m => m.toLowerCase() !== model.toLowerCase());
+      } else {
+        return [...prev, model];
+      }
+    });
+  };
+
   // Supabase Database Integration state
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<{
@@ -273,6 +303,15 @@ export default function App() {
     runId?: string;
   } | null>(null);
   const lastInsertedRunIdRef = useRef<string | null>(null);
+
+  // Documentation & Reference Modal state
+  const [isDocsModalOpen, setIsDocsModalOpen] = useState<boolean>(false);
+  const [docsModalTab, setDocsModalTab] = useState<'docs' | 'api' | 'privacy'>('docs');
+
+  const openDocs = (tab: 'docs' | 'api' | 'privacy' = 'docs') => {
+    setDocsModalTab(tab);
+    setIsDocsModalOpen(true);
+  };
 
   type SidebarTab = "config" | "prompt" | "history" | "all";
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("config");
@@ -709,12 +748,20 @@ export default function App() {
 
     setIsGenerating(true);
     sessionStartTimeRef.current = performance.now();
-    const initialResults: ModelResult[] = models.map((model, index) => ({
-      id: `${model}-${index}-${Date.now()}`,
-      modelName: model,
-      status: "idle",
-      output: "",
-    }));
+    const initialResults: ModelResult[] = models.map((model, index) => {
+      const willInject = enableSystemPrompt && customSystemPrompt.trim().length > 0 && (
+        systemPromptMode === 'all' || 
+        systemPromptTargetModels.some(m => m.toLowerCase() === model.toLowerCase())
+      );
+      return {
+        id: `${model}-${index}-${Date.now()}`,
+        modelName: model,
+        status: "idle",
+        output: "",
+        hasSystemPrompt: willInject,
+        systemPrompt: willInject ? customSystemPrompt : undefined,
+      };
+    });
 
     setResults(initialResults);
 
@@ -743,7 +790,9 @@ export default function App() {
         endpoint,
         customHeaders,
         headers: customHeaders,
-        results: [...results]
+        results: [...results],
+        systemPrompt: enableSystemPrompt ? customSystemPrompt : undefined,
+        systemPromptTargetModels: enableSystemPrompt ? systemPromptTargetModels : undefined,
       };
       
       setHistory(prev => {
@@ -854,9 +903,20 @@ export default function App() {
         });
       }
 
+      const willInject = enableSystemPrompt && customSystemPrompt.trim().length > 0 && (
+        systemPromptMode === 'all' || 
+        systemPromptTargetModels.some(m => m.toLowerCase() === modelName.toLowerCase())
+      );
+
+      const messages: Array<{ role: string; content: string }> = [];
+      if (willInject) {
+        messages.push({ role: "system", content: customSystemPrompt.trim() });
+      }
+      messages.push({ role: "user", content: prompt });
+
       const bodyPayload: Record<string, any> = {
         model: modelName,
-        messages: [{ role: "user", content: prompt }],
+        messages,
         stream: streamResponse,
         timeout: timeoutSeconds,
         request_timeout: timeoutSeconds,
@@ -1269,6 +1329,19 @@ export default function App() {
               ) : isSupabaseConfigured() ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-0.5 -right-0.5 ring-2 ring-white dark:ring-[#111622]" />
               ) : null}
+            </button>
+
+            {/* Documentation & Reference Modal button */}
+            <button
+              type="button"
+              onClick={() => openDocs('docs')}
+              data-testid="header-docs-btn"
+              aria-label="Open Documentation and API Reference"
+              title="Documentation (README.md) & API Reference (REFERENCE.md)"
+              className="flex items-center justify-center p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700 shadow-2xs"
+            >
+              <BookOpen className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span className="sr-only">Documentation</span>
             </button>
 
             {/* Theme Picker: Light, Dark, Sepia Light, Sepia Dark, Greenish Sepia */}
@@ -1692,6 +1765,205 @@ export default function App() {
                         className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[64px] font-mono leading-relaxed"
                         placeholder="x-litellm-api-key: Bearer sk-1234"
                       />
+                    )}
+                  </div>
+
+                  {/* Custom System Prompt Section */}
+                  <div className="rounded-xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-[#0f131c]/50 overflow-hidden">
+                    <div 
+                      onClick={() => setShowSystemPromptField(prev => !prev)}
+                      className="p-3 flex items-center justify-between cursor-pointer select-none hover:bg-gray-100/60 dark:hover:bg-gray-800/40 transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={showSystemPromptField}
+                      aria-label="Toggle Custom System Prompt configuration"
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowSystemPromptField(prev => !prev); } }}
+                      data-testid="toggle-system-prompt-field"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <div>
+                          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide cursor-pointer">
+                            Custom System Prompt
+                          </label>
+                          <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                            {enableSystemPrompt 
+                              ? (systemPromptMode === 'all' 
+                                  ? 'Active on all models' 
+                                  : (systemPromptTargetModels.length > 0 
+                                      ? `Active on ${systemPromptTargetModels.length} specific ${systemPromptTargetModels.length === 1 ? 'model' : 'models'}` 
+                                      : 'Enabled (No specific models selected)'))
+                              : 'Disabled (Injects into payload for specific models)'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Quick Enable Toggle Checkbox */}
+                        <div 
+                          onClick={(e) => e.stopPropagation()} 
+                          className="flex items-center gap-1.5 bg-white dark:bg-[#161c28] px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700"
+                        >
+                          <input
+                            type="checkbox"
+                            id="enable-system-prompt-checkbox"
+                            data-testid="enable-system-prompt-checkbox"
+                            checked={enableSystemPrompt}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setEnableSystemPrompt(checked);
+                              if (checked && !showSystemPromptField) {
+                                setShowSystemPromptField(true);
+                              }
+                            }}
+                            className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          />
+                          <label htmlFor="enable-system-prompt-checkbox" className="text-[10px] font-bold text-purple-700 dark:text-purple-300 cursor-pointer select-none">
+                            {enableSystemPrompt ? 'Active' : 'Enable'}
+                          </label>
+                        </div>
+
+                        {showSystemPromptField ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                      </div>
+                    </div>
+
+                    {showSystemPromptField && (
+                      <div className="p-3 pt-0 space-y-3 border-t border-gray-200/50 dark:border-gray-800/60 mt-1">
+                        {/* Prompt Presets */}
+                        <div className="flex flex-wrap items-center gap-1 pt-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 py-0.5">Presets:</span>
+                          {[
+                            { label: "Concise Expert", text: "You are an expert AI assistant. Provide concise, direct, and factual answers without fluff." },
+                            { label: "Deep Analyst", text: "You are a meticulous technical analyst. Provide step-by-step reasoning, edge-case evaluation, and in-depth analysis." },
+                            { label: "Code Architect", text: "You are a senior software architect. Output clean, optimal, well-commented code strictly conforming to best practices." }
+                          ].map(preset => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => {
+                                setCustomSystemPrompt(preset.text);
+                                setEnableSystemPrompt(true);
+                              }}
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-white dark:bg-[#161c28] border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:border-purple-300 dark:hover:border-purple-600 transition-colors cursor-pointer"
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* System Prompt Textarea */}
+                        <div>
+                          <label htmlFor="custom-system-prompt-textarea" className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">
+                            System Directive Content
+                          </label>
+                          <textarea
+                            id="custom-system-prompt-textarea"
+                            data-testid="system-prompt-textarea"
+                            value={customSystemPrompt}
+                            onChange={(e) => setCustomSystemPrompt(e.target.value)}
+                            placeholder="e.g. You are an expert AI assistant. Always structure your responses with markdown..."
+                            className="w-full px-3 py-2 bg-white dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition-all min-h-[64px] font-mono leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Target Model Selection */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-gray-600 dark:text-gray-400">
+                              Target Models for Injection
+                            </label>
+                            
+                            {/* Mode toggle */}
+                            <div className="flex items-center gap-1 bg-gray-200/70 dark:bg-gray-800 p-0.5 rounded-lg text-[10px] font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setSystemPromptMode('specific')}
+                                className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                                  systemPromptMode === 'specific'
+                                    ? 'bg-white dark:bg-[#111622] text-purple-700 dark:text-purple-300 shadow-2xs font-extrabold'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                                }`}
+                                data-testid="system-prompt-mode-specific"
+                              >
+                                Specific Models
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSystemPromptMode('all')}
+                                className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                                  systemPromptMode === 'all'
+                                    ? 'bg-white dark:bg-[#111622] text-purple-700 dark:text-purple-300 shadow-2xs font-extrabold'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                                }`}
+                                data-testid="system-prompt-mode-all"
+                              >
+                                All Models
+                              </button>
+                            </div>
+                          </div>
+
+                          {systemPromptMode === 'specific' ? (
+                            <div className="space-y-1.5">
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                                Click models to toggle system prompt injection:
+                              </p>
+                              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-white dark:bg-[#0b0f17] rounded-xl border border-gray-200 dark:border-gray-800">
+                                {configuredModels.length === 0 ? (
+                                  <span className="text-[11px] text-gray-400 py-1 px-1">No models in model list</span>
+                                ) : (
+                                  configuredModels.map((m) => {
+                                    const isTargeted = systemPromptTargetModels.some(
+                                      tm => tm.toLowerCase() === m.toLowerCase()
+                                    );
+                                    return (
+                                      <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => toggleSystemPromptModel(m)}
+                                        data-testid={`system-prompt-chip-${m}`}
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                                          isTargeted
+                                            ? 'bg-purple-50 dark:bg-purple-950/70 border-purple-400 dark:border-purple-600 text-purple-800 dark:text-purple-300 shadow-2xs font-bold'
+                                            : 'bg-gray-50 dark:bg-[#161c28] border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                                        }`}
+                                      >
+                                        <span className={`w-2 h-2 rounded-full ${isTargeted ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                                        <span>{m}</span>
+                                      </button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-400">
+                                  {systemPromptTargetModels.length} of {configuredModels.length} selected
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSystemPromptTargetModels([...configuredModels])}
+                                    className="text-purple-600 dark:text-purple-400 hover:underline cursor-pointer font-bold"
+                                  >
+                                    Select All
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSystemPromptTargetModels([])}
+                                    className="text-gray-500 hover:underline cursor-pointer"
+                                  >
+                                    Clear
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-2.5 rounded-xl bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 text-xs text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span>System prompt will be injected into payloads for <strong>all {configuredModels.length} models</strong> during benchmarking.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -2252,24 +2524,35 @@ export default function App() {
 
         {/* Results Display */}
         <div id="section-results" className={showLeftColumn ? "lg:col-span-8" : "lg:col-span-12 transition-all"}>
-          {results.length === 0 && viewMode !== "compare" ? (
+          {results.length === 0 && viewMode !== "compare" && viewMode !== "graph" ? (
             <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-white dark:bg-[#111622] rounded-3xl border border-dashed border-gray-200 dark:border-gray-800">
               <div className="w-16 h-16 bg-gray-50 dark:bg-[#0b0f17] rounded-2xl flex items-center justify-center mb-4">
                 <Cpu className="text-gray-300 dark:text-gray-600 w-8 h-8" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">No results yet</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs mt-2">Configure your endpoint and models, then click generate to see comparisons.</p>
-              {history.length > 0 && (
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
                 <button
                   type="button"
-                  data-testid="empty-open-compare-btn"
-                  onClick={() => setViewMode("compare")}
-                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  data-testid="empty-open-graph-btn"
+                  onClick={() => setViewMode("graph")}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
                 >
-                  <GitCompare className="w-3.5 h-3.5" />
-                  <span>Open Model Comparison View ({history.length} runs in history)</span>
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Open Model XY Graph</span>
                 </button>
-              )}
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="empty-open-compare-btn"
+                    onClick={() => setViewMode("compare")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                  >
+                    <GitCompare className="w-3.5 h-3.5" />
+                    <span>Open Comparison ({history.length} runs)</span>
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-3.5">
@@ -2351,6 +2634,19 @@ export default function App() {
                     >
                       <GitCompare className="w-3.5 h-3.5" />
                       <span>Comparison</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode("graph")}
+                      data-testid="view-mode-graph"
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                        viewMode === "graph" 
+                          ? "bg-white dark:bg-[#161c28] text-indigo-700 dark:text-indigo-400 shadow-xs font-bold" 
+                          : "hover:text-gray-900 dark:hover:text-gray-100"
+                      }`}
+                      title="XY Graph of Model Capabilities and Metrics with Mouseover Info"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>XY Graph</span>
                     </button>
                   </div>
 
@@ -2469,6 +2765,22 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Model Capability & Benchmark XY Graph (Visible in 'graph' mode) */}
+              {viewMode === "graph" && (
+                <div className="space-y-4">
+                  <ModelXYGraph 
+                    results={filteredResults}
+                    allSelectedModels={configuredModels}
+                    selectedId={selectedResultId}
+                    onSelectResult={(id) => {
+                      setSelectedResultId(id);
+                    }}
+                    systemPromptTargetModels={enableSystemPrompt ? (systemPromptMode === 'all' ? configuredModels : systemPromptTargetModels) : []}
+                    customSystemPrompt={customSystemPrompt}
+                  />
+                </div>
+              )}
+
               {/* Model Comparison View with Token-Level Diff (Visible in 'compare' mode) */}
               {viewMode === "compare" && (
                 <ModelComparisonView 
@@ -2555,6 +2867,15 @@ export default function App() {
                             <div>
                               <div className="flex items-center gap-2">
                                 <h3 className="font-bold text-sm font-mono text-gray-900 dark:text-white">{result.modelName}</h3>
+                                {result.hasSystemPrompt && (
+                                  <span 
+                                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-700 font-mono shadow-2xs"
+                                    title={`Injected Custom System Prompt: "${result.systemPrompt?.slice(0, 100) || 'Custom Directive'}"`}
+                                    data-testid={`system-prompt-badge-${result.modelName}`}
+                                  >
+                                    <Sparkles className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" /> System Prompt
+                                  </span>
+                                )}
                                 {result.id === fastestResult?.id && (
                                   <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 font-mono shadow-2xs">
                                     <Zap className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 fill-emerald-500/20" /> Fastest ({((result.metrics?.durationMs || 0) / 1000).toFixed(2)}s)
@@ -2741,16 +3062,37 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-gray-100 mt-12">
+      <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-gray-200 dark:border-gray-800 mt-12 transition-colors">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2 text-gray-400">
-            <Terminal className="w-4 h-4" />
+          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+            <Terminal className="w-4 h-4 text-indigo-500" />
             <span className="text-xs font-medium">Ollama & vLLM Compatible Benchmarking Tool</span>
           </div>
-          <div className="flex items-center gap-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            <a href="#" className="hover:text-indigo-600 transition-colors">Documentation</a>
-            <a href="#" className="hover:text-indigo-600 transition-colors">API Reference</a>
-            <a href="#" className="hover:text-indigo-600 transition-colors">Privacy</a>
+          <div className="flex items-center gap-6 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+            <button 
+              type="button"
+              onClick={() => openDocs('docs')}
+              data-testid="footer-docs-link"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              Documentation
+            </button>
+            <button 
+              type="button"
+              onClick={() => openDocs('api')}
+              data-testid="footer-api-ref-link"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              API Reference
+            </button>
+            <button 
+              type="button"
+              onClick={() => openDocs('privacy')}
+              data-testid="footer-privacy-link"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              Privacy
+            </button>
           </div>
         </div>
       </footer>
@@ -2952,6 +3294,13 @@ export default function App() {
       <SupabaseConfigModal 
         isOpen={isSupabaseModalOpen} 
         onClose={() => setIsSupabaseModalOpen(false)} 
+      />
+
+      {/* Documentation & Reference Modal */}
+      <DocumentationModal
+        isOpen={isDocsModalOpen}
+        onClose={() => setIsDocsModalOpen(false)}
+        initialTab={docsModalTab}
       />
     </div>
   );

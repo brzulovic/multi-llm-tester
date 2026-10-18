@@ -1033,6 +1033,138 @@ describe("LLM Multi-Tester App", () => {
     expect(sortTokensTableBtn).toBeInTheDocument();
     fireEvent.click(sortTokensTableBtn);
   });
+
+  it("allows configuring custom system prompt and injecting it into payload for specific models", async () => {
+    let sentBodies: any[] = [];
+    const mockFetch = vi.fn().mockImplementation((url, options) => {
+      if (options?.body) {
+        sentBodies.push(JSON.parse(options.body));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve({
+          choices: [{ message: { content: "Response generated" } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+        })
+      });
+    });
+    (global as any).fetch = mockFetch;
+
+    render(<App />);
+
+    // Configure model list with model-A and model-B
+    const modelListTextarea = screen.getByPlaceholderText(/myGemma3/i) as HTMLTextAreaElement;
+    fireEvent.change(modelListTextarea, { target: { value: "model-A\nmodel-B" } });
+
+    // Enable custom system prompt
+    const enableSysPromptCheckbox = screen.getByTestId("enable-system-prompt-checkbox");
+    fireEvent.click(enableSysPromptCheckbox);
+    expect((enableSysPromptCheckbox as HTMLInputElement).checked).toBe(true);
+
+    // Expand system prompt field if not already open
+    const toggleSysField = screen.getByTestId("toggle-system-prompt-field");
+    const sysPromptInput = screen.getByTestId("system-prompt-textarea") as HTMLTextAreaElement;
+    fireEvent.change(sysPromptInput, { target: { value: "You are a specialized test system prompt." } });
+
+    // Target only model-A specifically
+    const modelAChip = screen.getByTestId("system-prompt-chip-model-A");
+    fireEvent.click(modelAChip);
+
+    // Click Generate
+    const generateBtn = screen.getByText("Generate");
+    fireEvent.click(generateBtn);
+
+    await waitFor(() => {
+      expect(sentBodies.length).toBe(2);
+    });
+
+    // Check payload for model-A: should contain system prompt
+    const modelABody = sentBodies.find(b => b.model === "model-A");
+    expect(modelABody).toBeDefined();
+    expect(modelABody.messages.some((m: any) => m.role === "system" && m.content.includes("specialized test system prompt"))).toBe(true);
+
+    // Check payload for model-B: should NOT contain system prompt
+    const modelBBody = sentBodies.find(b => b.model === "model-B");
+    expect(modelBBody).toBeDefined();
+    expect(modelBBody.messages.some((m: any) => m.role === "system")).toBe(false);
+  });
+
+  it("renders XY Graph view mode and displays model capabilities on mouseover", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => Promise.resolve({
+        choices: [{ message: { content: "Sample output" } }],
+        usage: { prompt_tokens: 12, completion_tokens: 24, total_tokens: 36 }
+      })
+    });
+    (global as any).fetch = mockFetch;
+
+    render(<App />);
+
+    // Open XY Graph from empty state button
+    const openGraphBtn = screen.getByTestId("empty-open-graph-btn");
+    expect(openGraphBtn).toBeInTheDocument();
+    fireEvent.click(openGraphBtn);
+
+    // Check XY Graph container is rendered
+    expect(screen.getByTestId("model-xy-graph-container")).toBeInTheDocument();
+    expect(screen.getByTestId("xy-graph-x-axis-select")).toBeInTheDocument();
+    expect(screen.getByTestId("xy-graph-y-axis-select")).toBeInTheDocument();
+
+    // Check model node is rendered
+    const freeNode = screen.getByTestId("xy-node-free");
+    expect(freeNode).toBeInTheDocument();
+
+    // Hover over node to show capabilities tooltip
+    fireEvent.mouseEnter(freeNode);
+    expect(screen.getByTestId("xy-graph-tooltip")).toBeInTheDocument();
+    expect(screen.getByText(/Context Window/i)).toBeInTheDocument();
+    expect(screen.getByText(/Modalities/i)).toBeInTheDocument();
+  });
+
+  it("opens Documentation and API Reference modal from footer and header", () => {
+    render(<App />);
+
+    // Check footer link exists
+    const docsLink = screen.getByTestId("footer-docs-link");
+    expect(docsLink).toBeInTheDocument();
+
+    // Click Documentation link
+    fireEvent.click(docsLink);
+    expect(screen.getByTestId("docs-modal-container")).toBeInTheDocument();
+    expect(screen.getAllByText("README.md").length).toBeGreaterThan(0);
+
+    // Switch to API Reference tab
+    const apiTab = screen.getByTestId("tab-api-ref");
+    fireEvent.click(apiTab);
+    expect(screen.getAllByText("REFERENCE.md").length).toBeGreaterThan(0);
+
+    // Close modal
+    const closeBtn = screen.getByTestId("close-docs-modal");
+    fireEvent.click(closeBtn);
+    expect(screen.queryByTestId("docs-modal-container")).not.toBeInTheDocument();
+  });
+
+  it("provides button next to Test Connection to show Supabase content in a grid table", async () => {
+    render(<App />);
+
+    // Open Supabase modal
+    const supabaseBtn = screen.getByTestId("supabase-config-btn");
+    fireEvent.click(supabaseBtn);
+
+    // Verify "Test Connection" button exists
+    const testBtn = screen.getByTestId("supabase-test-btn");
+    expect(testBtn).toBeInTheDocument();
+
+    // Verify "View Data Grid Table" button exists next to Test Connection
+    const viewGridBtn = screen.getByTestId("supabase-view-data-grid-btn");
+    expect(viewGridBtn).toBeInTheDocument();
+  });
 });
+
 
 

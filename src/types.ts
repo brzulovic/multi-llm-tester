@@ -27,6 +27,8 @@ export interface ModelResult {
   error?: string;
   isTimeout?: boolean;
   rawErrorDetails?: string;
+  hasSystemPrompt?: boolean;
+  systemPrompt?: string;
 }
 
 export interface HistoryEntry {
@@ -37,4 +39,7 @@ export interface HistoryEntry {
   customHeaders?: string;
   headers?: string;
   results: ModelResult[];
+  systemPrompt?: string;
+  systemPromptTargetModels?: string[];
 }
+

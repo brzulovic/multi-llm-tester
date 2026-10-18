@@ -385,10 +385,15 @@ export function NetworkWaterfallPanel({
                   }`}
                 >
                   {/* Model Name & Method */}
-                  <div className="col-span-3 flex items-center gap-2 pr-2 overflow-hidden">
+                  <div className="col-span-3 flex items-center gap-1.5 pr-2 overflow-hidden">
                     <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[9px] font-black shrink-0">
                       POST
                     </span>
+                    {result.hasSystemPrompt && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-mono text-[8px] font-bold shrink-0" title="Custom System Prompt injected">
+                        SYS
+                      </span>
+                    )}
                     <span className="font-mono text-xs font-semibold text-gray-800 dark:text-gray-200 truncate" title={result.modelName}>
                       {result.modelName}
                     </span>

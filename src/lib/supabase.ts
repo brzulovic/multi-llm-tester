@@ -343,3 +343,58 @@ export async function insertBenchmarkRunToSupabase(
     };
   }
 }
+
+/**
+ * Fetches rows and total count from a given Supabase table for data grid viewing.
+ */
+export async function fetchSupabaseTableData(
+  tableName: string,
+  options?: { limit?: number; offset?: number; orderBy?: string; ascending?: boolean }
+): Promise<{ data: any[]; count: number | null; error: string | null }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { data: [], count: null, error: 'Supabase client is not configured (missing URL or Key).' };
+  }
+
+  try {
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+    const orderBy = options?.orderBy || 'created_at';
+    const ascending = options?.ascending ?? false;
+
+    // First attempt ordering by specified column or created_at
+    let query = client
+      .from(tableName)
+      .select('*', { count: 'exact' });
+
+    try {
+      query = query.order(orderBy, { ascending });
+    } catch {
+      // Ignore ordering errors if column does not exist
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, count, error } = await query;
+    if (error) {
+      // If order by created_at failed because column doesn't exist, try unordered select
+      if (error.code === '42703' || error.message?.includes('does not exist')) {
+        const fallback = await client.from(tableName).select('*', { count: 'exact' }).range(offset, offset + limit - 1);
+        if (fallback.error) {
+          return { data: [], count: null, error: fallback.error.message };
+        }
+        return { data: fallback.data || [], count: fallback.count ?? (fallback.data?.length || 0), error: null };
+      }
+      return { data: [], count: null, error: error.message };
+    }
+
+    return {
+      data: data || [],
+      count: count ?? (data?.length || 0),
+      error: null
+    };
+  } catch (err: any) {
+    return { data: [], count: null, error: err?.message || 'Failed to query Supabase table' };
+  }
+}
+
