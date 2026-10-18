@@ -25,9 +25,9 @@ interface NetworkWaterfallPanelProps {
   results: ModelResult[];
   onSelectResult?: (id: string) => void;
   selectedId?: string | null;
-  sortField?: 'name' | 'state' | 'time' | 'speed' | null;
+  sortField?: 'name' | 'state' | 'time' | 'speed' | 'tokens' | null;
   sortDirection?: 'asc' | 'desc';
-  onSortChange?: (field: 'name' | 'state' | 'time' | 'speed') => void;
+  onSortChange?: (field: 'name' | 'state' | 'time' | 'speed' | 'tokens') => void;
 }
 
 export function NetworkWaterfallPanel({ 
@@ -39,7 +39,7 @@ export function NetworkWaterfallPanel({
   onSortChange
 }: NetworkWaterfallPanelProps) {
   const [hoveredResult, setHoveredResult] = useState<string | null>(null);
-  const [internalSortField, setInternalSortField] = useState<'name' | 'state' | 'time' | 'speed' | null>(null);
+  const [internalSortField, setInternalSortField] = useState<'name' | 'state' | 'time' | 'speed' | 'tokens' | null>(null);
   const [internalSortDirection, setInternalSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const sortField = controlledSortField !== undefined ? controlledSortField : internalSortField;
@@ -47,12 +47,12 @@ export function NetworkWaterfallPanel({
 
   if (results.length === 0) return null;
 
-  const handleSort = (field: 'name' | 'state' | 'time' | 'speed') => {
+  const handleSort = (field: 'name' | 'state' | 'time' | 'speed' | 'tokens') => {
     if (onSortChange) {
       onSortChange(field);
     } else {
       if (internalSortField === field) {
-        if (field === 'speed') {
+        if (field === 'speed' || field === 'tokens') {
           if (internalSortDirection === 'desc') {
             setInternalSortDirection('asc');
           } else {
@@ -69,7 +69,7 @@ export function NetworkWaterfallPanel({
         }
       } else {
         setInternalSortField(field);
-        setInternalSortDirection(field === 'speed' ? 'desc' : 'asc');
+        setInternalSortDirection((field === 'speed' || field === 'tokens') ? 'desc' : 'asc');
       }
     }
   };
@@ -106,6 +106,13 @@ export function NetworkWaterfallPanel({
         const speedA = a.metrics?.tokensPerSecond ?? 0;
         const speedB = b.metrics?.tokensPerSecond ?? 0;
         cmp = speedA - speedB;
+        if (cmp === 0) {
+          cmp = a.modelName.localeCompare(b.modelName);
+        }
+      } else if (sortField === 'tokens') {
+        const tokA = a.metrics?.totalTokens ?? (a.metrics?.completionTokens ?? 0);
+        const tokB = b.metrics?.totalTokens ?? (b.metrics?.completionTokens ?? 0);
+        cmp = tokA - tokB;
         if (cmp === 0) {
           cmp = a.modelName.localeCompare(b.modelName);
         }
@@ -156,7 +163,7 @@ export function NetworkWaterfallPanel({
     : null;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden font-sans">
+    <div className="bg-white dark:bg-[#111622] rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm overflow-hidden font-sans">
       {/* DevTools Network Tab Header Bar */}
       <div className="bg-[#1E222B] text-gray-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-gray-800">
         <div className="flex items-center gap-3">
@@ -188,20 +195,20 @@ export function NetworkWaterfallPanel({
       </div>
 
       {/* Legend & Phase indicators */}
-      <div className="bg-gray-50 px-5 py-2 border-b border-gray-200/70 flex flex-wrap items-center justify-between gap-3 text-[11px]">
-        <div className="flex items-center gap-4 text-gray-600">
-          <span className="font-semibold text-gray-500 uppercase tracking-wider text-[10px]">Phases:</span>
+      <div className="bg-gray-50 dark:bg-[#161c28] px-5 py-2 border-b border-gray-200/70 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3 text-[11px]">
+        <div className="flex items-center gap-4 text-gray-600 dark:text-gray-300">
+          <span className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-[10px]">Phases:</span>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-2.5 rounded-sm bg-gray-300 inline-block" />
-            <span className="text-gray-600">Queueing</span>
+            <span className="w-3 h-2.5 rounded-sm bg-gray-300 dark:bg-gray-600 inline-block" />
+            <span className="text-gray-600 dark:text-gray-300">Queueing</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-2.5 rounded-sm bg-amber-400 inline-block" />
-            <span className="text-gray-600">Waiting (TTFB)</span>
+            <span className="text-gray-600 dark:text-gray-300">Waiting (TTFB)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-2.5 rounded-sm bg-indigo-500 inline-block" />
-            <span className="text-gray-600">Token Generation & Download</span>
+            <span className="text-gray-600 dark:text-gray-300">Token Generation & Download</span>
           </div>
         </div>
 
@@ -215,12 +222,12 @@ export function NetworkWaterfallPanel({
                 onSelectResult(fastestResult.id);
               }
             }}
-            className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 text-[10px] font-mono transition-all group cursor-pointer shadow-2xs hover:border-emerald-300"
+            className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono transition-all group cursor-pointer shadow-2xs hover:border-emerald-300 dark:hover:border-emerald-700"
             title={`Jump to fastest result: ${fastestResult.modelName}`}
           >
-            <Zap className="w-3 h-3 text-emerald-600 fill-emerald-500/20 group-hover:scale-110 transition-transform" />
+            <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400 fill-emerald-500/20 group-hover:scale-110 transition-transform" />
             <span>Fastest: <strong>{fastestResult.modelName}</strong> ({((fastestResult.metrics?.durationMs || 0) / 1000).toFixed(2)}s)</span>
-            <ArrowDown className="w-3 h-3 text-emerald-600 opacity-60 group-hover:opacity-100 group-hover:translate-y-0.5 transition-all" />
+            <ArrowDown className="w-3 h-3 text-emerald-600 dark:text-emerald-400 opacity-60 group-hover:opacity-100 group-hover:translate-y-0.5 transition-all" />
           </a>
         )}
       </div>
@@ -229,20 +236,20 @@ export function NetworkWaterfallPanel({
       <div className="overflow-x-auto">
         <div className="min-w-[760px]">
           {/* Table Header with Timeline Ruler */}
-          <div className="grid grid-cols-12 bg-gray-100/90 text-gray-500 text-[10px] font-bold uppercase tracking-wider border-b border-gray-200 py-2 px-4 items-center">
+          <div className="grid grid-cols-12 bg-gray-100/90 dark:bg-[#181d2a] text-gray-500 dark:text-gray-400 text-[10px] font-bold uppercase tracking-wider border-b border-gray-200 dark:border-gray-800 py-2 px-4 items-center">
             {/* Sortable Name Column */}
             <button
               type="button"
               onClick={() => handleSort('name')}
-              className="col-span-3 flex items-center gap-1.5 hover:text-indigo-600 transition-colors text-left font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
+              className="col-span-3 flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-left font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
               title="Click to sort by model Name"
             >
               <span>Name / Method</span>
               {sortField === 'name' ? (
                 sortDirection === 'asc' ? (
-                  <ArrowUp className="w-3 h-3 text-indigo-600" />
+                  <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 ) : (
-                  <ArrowDown className="w-3 h-3 text-indigo-600" />
+                  <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 )
               ) : (
                 <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -253,38 +260,57 @@ export function NetworkWaterfallPanel({
             <button
               type="button"
               onClick={() => handleSort('state')}
-              className="col-span-1 flex items-center justify-center gap-1 hover:text-indigo-600 transition-colors text-center font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
+              className="col-span-1 flex items-center justify-center gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-center font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
               title="Click to sort by State / Status"
             >
               <span>State</span>
               {sortField === 'state' ? (
                 sortDirection === 'asc' ? (
-                  <ArrowUp className="w-3 h-3 text-indigo-600" />
+                  <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 ) : (
-                  <ArrowDown className="w-3 h-3 text-indigo-600" />
+                  <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 )
               ) : (
                 <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-60 group-hover:opacity-100 transition-opacity" />
               )}
             </button>
 
-            <div className="col-span-1 text-center">Type</div>
-            <div className="col-span-1 text-right">Tokens</div>
+            <div className="col-span-1 text-center font-mono text-[10px] text-gray-500 dark:text-gray-400">Type</div>
+            
+            {/* Sortable Tokens Column */}
+            <button
+              type="button"
+              onClick={() => handleSort('tokens')}
+              data-testid="sort-tokens-btn"
+              className="col-span-1 flex items-center justify-end gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-right font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
+              title="Click to sort by Tokens"
+            >
+              <span>Tokens</span>
+              {sortField === 'tokens' ? (
+                sortDirection === 'desc' ? (
+                  <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                ) : (
+                  <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                )
+              ) : (
+                <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+              )}
+            </button>
 
             {/* Sortable Time Column */}
             <button
               type="button"
               onClick={() => handleSort('time')}
               data-testid="sort-time-btn"
-              className="col-span-1 flex items-center justify-end gap-1 hover:text-indigo-600 transition-colors text-right font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
+              className="col-span-1 flex items-center justify-end gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-right font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
               title="Click to sort by Time / duration"
             >
               <span>Time</span>
               {sortField === 'time' ? (
                 sortDirection === 'asc' ? (
-                  <ArrowUp className="w-3 h-3 text-indigo-600" />
+                  <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 ) : (
-                  <ArrowDown className="w-3 h-3 text-indigo-600" />
+                  <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 )
               ) : (
                 <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -296,15 +322,15 @@ export function NetworkWaterfallPanel({
               type="button"
               onClick={() => handleSort('speed')}
               data-testid="sort-speed-btn"
-              className="col-span-1 flex items-center justify-end gap-1 hover:text-indigo-600 transition-colors text-right font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
+              className="col-span-1 flex items-center justify-end gap-1 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-right font-bold uppercase tracking-wider group cursor-pointer focus:outline-none"
               title="Click to sort by Speed / tokens per second"
             >
               <span>Speed</span>
               {sortField === 'speed' ? (
                 sortDirection === 'desc' ? (
-                  <ArrowDown className="w-3 h-3 text-indigo-600" />
+                  <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 ) : (
-                  <ArrowUp className="w-3 h-3 text-indigo-600" />
+                  <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                 )
               ) : (
                 <ArrowUpDown className="w-3 h-3 text-gray-400 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -313,7 +339,7 @@ export function NetworkWaterfallPanel({
             
             {/* Waterfall Ruler Header */}
             <div className="col-span-4 pl-3 relative h-4">
-              <div className="absolute inset-0 flex justify-between items-center text-[9px] font-mono text-gray-400 select-none">
+              <div className="absolute inset-0 flex justify-between items-center text-[9px] font-mono text-gray-400 dark:text-gray-500 select-none">
                 {ticks.map((t, idx) => (
                   <span 
                     key={idx} 
@@ -328,7 +354,7 @@ export function NetworkWaterfallPanel({
           </div>
 
           {/* Table Rows */}
-          <div className="divide-y divide-gray-100 text-xs">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800/80 text-xs">
             {sortedResults.map((result) => {
               const startOffset = result.startTimeOffsetMs || result.metrics?.queueMs || 0;
               const duration = result.metrics?.durationMs || 0;
@@ -352,18 +378,18 @@ export function NetworkWaterfallPanel({
                   onMouseLeave={() => setHoveredResult(null)}
                   className={`grid grid-cols-12 py-2.5 px-4 items-center transition-colors cursor-pointer group ${
                     isSelected 
-                      ? 'bg-indigo-50/70' 
+                      ? 'bg-indigo-50/70 dark:bg-indigo-950/40' 
                       : isHovered 
-                        ? 'bg-gray-50' 
-                        : 'hover:bg-gray-50/70'
+                        ? 'bg-gray-50 dark:bg-[#161c28]' 
+                        : 'hover:bg-gray-50/70 dark:hover:bg-[#161c28]/60'
                   }`}
                 >
                   {/* Model Name & Method */}
                   <div className="col-span-3 flex items-center gap-2 pr-2 overflow-hidden">
-                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-mono text-[9px] font-black shrink-0">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[9px] font-black shrink-0">
                       POST
                     </span>
-                    <span className="font-mono text-xs font-semibold text-gray-800 truncate" title={result.modelName}>
+                    <span className="font-mono text-xs font-semibold text-gray-800 dark:text-gray-200 truncate" title={result.modelName}>
                       {result.modelName}
                     </span>
                   </div>
@@ -371,61 +397,61 @@ export function NetworkWaterfallPanel({
                   {/* Status */}
                   <div className="col-span-1 text-center">
                     {result.status === "pending" && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-mono text-[10px] font-bold">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-mono text-[10px] font-bold">
                         <Loader2 className="w-2.5 h-2.5 animate-spin" />
                         ...
                       </span>
                     )}
                     {result.status === "success" && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-mono text-[10px] font-bold">
                         {result.statusCode || 200}
                       </span>
                     )}
                     {result.status === "error" && (
                       <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold ${
-                        result.isTimeout ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-red-100 text-red-700'
+                        result.isTimeout ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
                       }`} title={result.isTimeout ? `Timed out after ${((result.metrics?.durationMs || 0)/1000).toFixed(1)}s` : result.error}>
-                        {result.statusCode || 500} {result.isTimeout && <Clock className="w-2.5 h-2.5 ml-0.5 text-amber-700" />}
+                        {result.statusCode || 500} {result.isTimeout && <Clock className="w-2.5 h-2.5 ml-0.5 text-amber-700 dark:text-amber-400" />}
                       </span>
                     )}
                     {result.status === "idle" && (
-                      <span className="text-gray-400 font-mono text-[10px]">-</span>
+                      <span className="text-gray-400 dark:text-gray-600 font-mono text-[10px]">-</span>
                     )}
                   </div>
 
                   {/* Type */}
-                  <div className="col-span-1 text-center font-mono text-[10px] text-gray-500">
+                  <div className="col-span-1 text-center font-mono text-[10px] text-gray-500 dark:text-gray-400">
                     fetch
                   </div>
 
                   {/* Tokens */}
-                  <div className="col-span-1 text-right font-mono text-xs font-medium text-gray-700">
+                  <div className="col-span-1 text-right font-mono text-xs font-medium text-gray-700 dark:text-gray-300">
                     {result.status === "success" ? (
                       <span title={`Prompt: ${result.metrics?.promptTokens || 0} | Completion: ${result.metrics?.completionTokens || 0}`}>
                         {result.metrics?.totalTokens || 0}
                       </span>
                     ) : (
-                      <span className="text-gray-300">-</span>
+                      <span className="text-gray-300 dark:text-gray-600">-</span>
                     )}
                   </div>
 
                   {/* Time */}
-                  <div className="col-span-1 text-right font-mono text-xs font-bold text-gray-800">
+                  <div className="col-span-1 text-right font-mono text-xs font-bold text-gray-800 dark:text-gray-200">
                     {result.status === "success" || result.status === "error" ? (
                       duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${Math.round(duration)}ms`
                     ) : result.status === "pending" ? (
-                      <span className="text-amber-500 text-[10px]">active</span>
+                      <span className="text-amber-500 dark:text-amber-400 text-[10px]">active</span>
                     ) : (
-                      <span className="text-gray-300">-</span>
+                      <span className="text-gray-300 dark:text-gray-600">-</span>
                     )}
                   </div>
 
                   {/* Speed */}
-                  <div className="col-span-1 text-right font-mono text-xs text-indigo-600 font-bold">
+                  <div className="col-span-1 text-right font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">
                     {result.status === "success" && (result.metrics?.tokensPerSecond || 0) > 0 ? (
                       `${result.metrics?.tokensPerSecond.toFixed(1)}/s`
                     ) : (
-                      <span className="text-gray-300">-</span>
+                      <span className="text-gray-300 dark:text-gray-600">-</span>
                     )}
                   </div>
 
@@ -437,7 +463,7 @@ export function NetworkWaterfallPanel({
                         <div 
                           key={idx} 
                           style={{ left: `${t.percent}%` }}
-                          className="absolute top-0 bottom-0 w-[1px] bg-gray-200" 
+                          className="absolute top-0 bottom-0 w-[1px] bg-gray-200 dark:bg-gray-700/60" 
                         />
                       ))}
                     </div>
@@ -473,7 +499,7 @@ export function NetworkWaterfallPanel({
                         />
 
                         {/* Timing Label next to bar */}
-                        <span className="absolute -right-1 translate-x-full pl-1.5 top-1/2 -translate-y-1/2 text-[9px] font-mono font-bold text-gray-500 opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-10 bg-white/90 px-1 rounded shadow-xs">
+                        <span className="absolute -right-1 translate-x-full pl-1.5 top-1/2 -translate-y-1/2 text-[9px] font-mono font-bold text-gray-500 dark:text-gray-300 opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-10 bg-white/90 dark:bg-[#181d2a]/95 px-1 rounded shadow-xs">
                           {duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${Math.round(duration)}ms`}
                         </span>
                       </div>

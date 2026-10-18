@@ -57,7 +57,8 @@ import {
   BookOpen,
   Check,
   Server,
-  Globe
+  Globe,
+  Filter
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -1122,12 +1123,13 @@ export default function App() {
     navigator.clipboard.writeText(text);
   };
 
-  const [sortField, setSortField] = useState<'name' | 'state' | 'time' | 'speed' | null>(null);
+  const [sortField, setSortField] = useState<'name' | 'state' | 'time' | 'speed' | 'tokens' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'success' | 'error' | 'pending' | 'idle'>('all');
 
-  const handleSortChange = (field: 'name' | 'state' | 'time' | 'speed') => {
+  const handleSortChange = (field: 'name' | 'state' | 'time' | 'speed' | 'tokens') => {
     if (sortField === field) {
-      if (field === 'speed') {
+      if (field === 'speed' || field === 'tokens') {
         if (sortDirection === 'desc') {
           setSortDirection('asc');
         } else {
@@ -1144,13 +1146,28 @@ export default function App() {
       }
     } else {
       setSortField(field);
-      setSortDirection(field === 'speed' ? 'desc' : 'asc');
+      setSortDirection((field === 'speed' || field === 'tokens') ? 'desc' : 'asc');
     }
   };
 
+  const statusCounts = React.useMemo(() => {
+    return {
+      all: results.length,
+      success: results.filter(r => r.status === "success").length,
+      error: results.filter(r => r.status === "error").length,
+      pending: results.filter(r => r.status === "pending").length,
+      idle: results.filter(r => r.status === "idle").length,
+    };
+  }, [results]);
+
+  const filteredResults = React.useMemo(() => {
+    if (filterStatus === 'all') return results;
+    return results.filter(r => r.status === filterStatus);
+  }, [results, filterStatus]);
+
   const sortedResults = React.useMemo(() => {
-    if (!sortField) return results;
-    return [...results].sort((a, b) => {
+    if (!sortField) return filteredResults;
+    return [...filteredResults].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'name') {
         cmp = a.modelName.localeCompare(b.modelName);
@@ -1183,10 +1200,17 @@ export default function App() {
         if (cmp === 0) {
           cmp = a.modelName.localeCompare(b.modelName);
         }
+      } else if (sortField === 'tokens') {
+        const tokA = a.metrics?.totalTokens ?? (a.metrics?.completionTokens ?? 0);
+        const tokB = b.metrics?.totalTokens ?? (b.metrics?.completionTokens ?? 0);
+        cmp = tokA - tokB;
+        if (cmp === 0) {
+          cmp = a.modelName.localeCompare(b.modelName);
+        }
       }
       return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [results, sortField, sortDirection]);
+  }, [filteredResults, sortField, sortDirection]);
 
   const finishedResults = results.filter(r => r.status === "success");
   const fastestResult = finishedResults.length > 0
@@ -2330,6 +2354,36 @@ export default function App() {
                     </button>
                   </div>
 
+                  {/* Filter State Select */}
+                  <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 px-1.5 flex items-center gap-1">
+                      <Filter className="w-3 h-3" /> State:
+                    </span>
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value as any)}
+                      data-testid="filter-state-select"
+                      aria-label="Filter results by state"
+                      className="bg-white dark:bg-[#161c28] text-gray-800 dark:text-gray-200 text-xs font-bold px-2 py-1 rounded-lg border border-gray-200/80 dark:border-gray-700 shadow-2xs focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="all">All States ({statusCounts.all})</option>
+                      <option value="success">Success ({statusCounts.success})</option>
+                      <option value="error">Failed ({statusCounts.error})</option>
+                      <option value="pending">Pending ({statusCounts.pending})</option>
+                      <option value="idle">Idle ({statusCounts.idle})</option>
+                    </select>
+                    {filterStatus !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatus('all')}
+                        title="Clear state filter"
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
                   {/* Quick Sort Controls */}
                   <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl text-xs font-semibold text-gray-600 dark:text-gray-300">
                     <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 px-1.5">Sort:</span>
@@ -2358,6 +2412,19 @@ export default function App() {
                       <Zap className="w-3 h-3" />
                       <span>Speed</span>
                       {sortField === 'speed' && (sortDirection === 'desc' ? <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> : <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />)}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="quick-sort-tokens"
+                      onClick={() => handleSortChange('tokens')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                        sortField === 'tokens' ? 'bg-white dark:bg-[#161c28] text-indigo-700 dark:text-indigo-400 shadow-xs font-bold' : 'hover:text-gray-900 dark:hover:text-gray-100'
+                      }`}
+                      title="Sort by Tokens (highest token count first)"
+                    >
+                      <Hash className="w-3 h-3" />
+                      <span>Tokens</span>
+                      {sortField === 'tokens' && (sortDirection === 'desc' ? <ArrowDown className="w-3 h-3 text-indigo-600 dark:text-indigo-400" /> : <ArrowUp className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />)}
                     </button>
                   </div>
                 </div>
@@ -2405,7 +2472,7 @@ export default function App() {
               {/* Model Comparison View with Token-Level Diff (Visible in 'compare' mode) */}
               {viewMode === "compare" && (
                 <ModelComparisonView 
-                  currentResults={results}
+                  currentResults={filteredResults}
                   history={history}
                   currentPrompt={prompt}
                   initialModelAId={comparisonModelAId}
@@ -2417,7 +2484,7 @@ export default function App() {
               {(viewMode === "split" || viewMode === "waterfall") && (
                 <div className="space-y-2">
                   <NetworkWaterfallPanel 
-                    results={results} 
+                    results={filteredResults} 
                     selectedId={selectedResultId}
                     sortField={sortField}
                     sortDirection={sortDirection}
@@ -2439,6 +2506,24 @@ export default function App() {
               {/* Response Cards Grid (Visible in 'split' and 'cards' modes) */}
               {(viewMode === "split" || viewMode === "cards") && (
                 <div className="grid grid-cols-1 gap-6">
+                  {sortedResults.length === 0 && results.length > 0 && (
+                    <div className="bg-white dark:bg-[#111622] rounded-2xl border border-gray-200 dark:border-gray-800 p-8 text-center space-y-3 shadow-xs">
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto text-gray-400 dark:text-gray-500">
+                        <Filter className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                        No models matching state filter: <span className="text-indigo-600 dark:text-indigo-400 uppercase font-mono font-bold">{filterStatus}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setFilterStatus('all')}
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                      >
+                        Show All States ({results.length})
+                      </button>
+                    </div>
+                  )}
+
                   <AnimatePresence mode="popLayout">
                     {sortedResults.map((result, index) => (
                       <motion.div
@@ -2553,43 +2638,43 @@ export default function App() {
 
                           {result.status === 'error' && (
                             <div className="space-y-4">
-                              <div className="p-4 bg-red-50 rounded-xl border border-red-100 flex gap-3">
+                              <div className="p-4 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-100 dark:border-red-900/60 flex gap-3">
                                 <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <p className="text-sm font-bold text-red-700">Request Failed ({result.statusCode || 500})</p>
+                                    <p className="text-sm font-bold text-red-700 dark:text-red-300">Request Failed ({result.statusCode || 500})</p>
                                     {result.isTimeout && (
-                                      <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold uppercase rounded-md flex items-center gap-1 font-mono">
+                                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[10px] font-bold uppercase rounded-md flex items-center gap-1 font-mono">
                                         <Clock className="w-3 h-3" /> Timeout (50s+)
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-xs text-red-600 mt-1 leading-relaxed font-mono break-all">{result.error}</p>
+                                  <p className="text-xs text-red-600 dark:text-red-400 mt-1 leading-relaxed font-mono break-all">{result.error}</p>
                                 </div>
                               </div>
 
                               {/* Dedicated Timeout Diagnostics & Troubleshooting Guide */}
                               {result.isTimeout && (
-                                <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-3">
+                                <div className="p-4 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl text-xs text-amber-950 dark:text-amber-200 space-y-3">
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 font-bold text-amber-900">
-                                      <Clock className="w-4 h-4 text-amber-600" />
+                                    <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-300">
+                                      <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                                       <span>Why did this fail with 500 / Timeout?</span>
                                     </div>
-                                    <span className="text-[10px] font-mono font-bold bg-amber-200/70 text-amber-800 px-2 py-0.5 rounded">
+                                    <span className="text-[10px] font-mono font-bold bg-amber-200/70 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded">
                                       Duration: {((result.metrics?.durationMs || 0) / 1000).toFixed(1)}s
                                     </span>
                                   </div>
 
-                                  <p className="text-amber-800 leading-relaxed">
+                                  <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
                                     Your local model ran for <strong>{((result.metrics?.durationMs || 0) / 1000).toFixed(1)} seconds</strong>. By default, LiteLLM, Ollama proxies, and gateway routers terminate idle non-streaming connections around <strong>50s-60s</strong> and return HTTP 500.
                                   </p>
 
-                                  <div className="bg-white p-3 rounded-lg border border-amber-200/80 space-y-2.5">
-                                    <p className="font-bold text-gray-800 flex items-center gap-1.5">
-                                      <Zap className="w-3.5 h-3.5 text-indigo-600" /> Recommended fixes:
+                                  <div className="bg-white dark:bg-[#161c28] p-3 rounded-lg border border-amber-200/80 dark:border-amber-900/40 space-y-2.5">
+                                    <p className="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                      <Zap className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Recommended fixes:
                                     </p>
-                                    <ul className="space-y-2 text-gray-700">
+                                    <ul className="space-y-2 text-gray-700 dark:text-gray-300">
                                       <li className="flex items-start gap-2">
                                         <span className="font-bold text-indigo-600 shrink-0">1.</span>
                                         <div>

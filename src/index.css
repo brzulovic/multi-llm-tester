@@ -3,8 +3,59 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ==========================================================================
-   Custom Theme Styles: Sepia Light, Sepia Dark, Greenish Sepia
+   Custom Theme Styles: Dark, Sepia Light, Sepia Dark, Greenish Sepia
    ========================================================================== */
+
+/* --- DARK THEME SURFACE & RESULTS OVERRIDES --- */
+.theme-dark,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) {
+  color-scheme: dark;
+}
+
+.theme-dark header,
+.theme-dark .bg-white,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .bg-white {
+  background-color: #111622;
+  border-color: #1f293d;
+}
+
+.theme-dark .bg-gray-50,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .bg-gray-50 {
+  background-color: #161c28;
+  border-color: #1f293d;
+}
+
+.theme-dark .bg-gray-100,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .bg-gray-100 {
+  background-color: #1a2232;
+  border-color: #242f45;
+}
+
+.theme-dark .border-gray-100,
+.theme-dark .border-gray-200,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .border-gray-100,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .border-gray-200 {
+  border-color: #1f293d;
+}
+
+.theme-dark .text-gray-900,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .text-gray-900 {
+  color: #f3f4f6;
+}
+
+.theme-dark .text-gray-800,
+.theme-dark .text-gray-700,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .text-gray-800,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .text-gray-700 {
+  color: #d1d5db;
+}
+
+.theme-dark .text-gray-600,
+.theme-dark .text-gray-500,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .text-gray-600,
+.dark:not(.theme-sepia-dark):not(.theme-sepia-light):not(.theme-sepia-green) .text-gray-500 {
+  color: #9ca3af;
+}
 
 /* --- SEPIA LIGHT --- */
 .theme-sepia-light {

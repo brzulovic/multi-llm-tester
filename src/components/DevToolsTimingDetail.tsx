@@ -54,7 +54,7 @@ export function DevToolsTimingDetail({ result }: DevToolsTimingDetailProps) {
   const completionTokPct = Math.round((metrics.completionTokens / totalTok) * 100) || 0;
 
   return (
-    <div className="pt-4 border-t border-gray-100 font-sans">
+    <div className="pt-4 border-t border-gray-100 dark:border-gray-800 font-sans">
       {/* DevTools Network Summary Ribbon */}
       <div className="bg-[#1E222B] text-gray-200 rounded-xl p-3 mb-3 border border-gray-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center gap-2">
@@ -89,15 +89,15 @@ export function DevToolsTimingDetail({ result }: DevToolsTimingDetailProps) {
       </div>
 
       {/* DevTools Mini Waterfall Bar */}
-      <div className="bg-gray-50 rounded-xl p-3 border border-gray-200/80 mb-3">
+      <div className="bg-gray-50 dark:bg-[#161c28] rounded-xl p-3 border border-gray-200/80 dark:border-gray-800 mb-3">
         <div className="flex items-center justify-between text-[11px] mb-1.5 font-mono">
-          <div className="flex items-center gap-1.5 font-bold text-gray-700">
-            <Activity className="w-3.5 h-3.5 text-indigo-500" />
+          <div className="flex items-center gap-1.5 font-bold text-gray-700 dark:text-gray-200">
+            <Activity className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
             <span>DevTools Network Timing</span>
           </div>
           <button
             onClick={() => setShowFullTiming(!showFullTiming)}
-            className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-wider transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 uppercase tracking-wider transition-colors cursor-pointer"
           >
             {showFullTiming ? (
               <>Hide Breakdown <ChevronUp className="w-3 h-3" /></>
@@ -108,7 +108,7 @@ export function DevToolsTimingDetail({ result }: DevToolsTimingDetailProps) {
         </div>
 
         {/* The Multi-Phase Waterfall Bar */}
-        <div className="h-4 w-full bg-gray-200 rounded-md overflow-hidden flex shadow-inner">
+        <div className="h-4 w-full bg-gray-200 dark:bg-gray-700/60 rounded-md overflow-hidden flex shadow-inner">
           <div 
             style={{ width: `${requestSentPct}%` }}
             className="h-full bg-sky-400 hover:bg-sky-300 transition-colors"
@@ -127,7 +127,7 @@ export function DevToolsTimingDetail({ result }: DevToolsTimingDetailProps) {
         </div>
 
         {/* Phase Legend */}
-        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-[10px] font-mono text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-[10px] font-mono text-gray-500 dark:text-gray-400">
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-xs bg-sky-400" />
             <span>Sent: {Math.round(requestSentMs)}ms</span>
@@ -140,7 +140,7 @@ export function DevToolsTimingDetail({ result }: DevToolsTimingDetailProps) {
             <span className="w-2 h-2 rounded-xs bg-indigo-500" />
             <span>Generation: {Math.round(downloadMs)}ms</span>
           </div>
-          <div className="text-gray-700 font-bold">
+          <div className="text-gray-700 dark:text-gray-200 font-bold">
             Total: {totalMs >= 1000 ? `${(totalMs / 1000).toFixed(2)}s` : `${Math.round(totalMs)}ms`}
           </div>
         </div>

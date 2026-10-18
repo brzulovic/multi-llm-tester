@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import App from "./App";
 
@@ -937,6 +937,101 @@ describe("LLM Multi-Tester App", () => {
     const copyBtn = screen.getByTestId("copy-endpoint-btn");
     expect(copyBtn).toBeInTheDocument();
     fireEvent.click(copyBtn);
+  });
+
+  it("filters results by state using the state select dropdown in results toolbar", async () => {
+    const mockFetch = vi.fn().mockImplementation((url, options) => {
+      const body = JSON.parse(options.body);
+      const model = body.model;
+      if (model === "success-model") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: () => Promise.resolve({
+            choices: [{ message: { content: "Output from success model" } }],
+            usage: { total_tokens: 42 }
+          }),
+        });
+      }
+      return Promise.reject(new Error("Connection refused to failed-model"));
+    });
+    (global as any).fetch = mockFetch;
+
+    render(<App />);
+
+    const modelListTextarea = screen.getByPlaceholderText(/myGemma3/i) as HTMLTextAreaElement;
+    fireEvent.change(modelListTextarea, { target: { value: "success-model\nfailed-model" } });
+
+    const generateBtn = screen.getByText("Generate");
+    fireEvent.click(generateBtn);
+
+    // Wait for models to finish
+    expect(await screen.findByText("Output from success model")).toBeInTheDocument();
+    expect(await screen.findByText(/Connection refused to failed-model/i)).toBeInTheDocument();
+
+    // Verify filter state select exists
+    const filterSelect = screen.getByTestId("filter-state-select") as HTMLSelectElement;
+    expect(filterSelect).toBeInTheDocument();
+    expect(filterSelect.value).toBe("all");
+
+    // Filter by 'error'
+    fireEvent.change(filterSelect, { target: { value: "error" } });
+    expect(screen.getByText(/Connection refused to failed-model/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("Output from success model")).not.toBeInTheDocument();
+    });
+
+    // Filter by 'success'
+    fireEvent.change(filterSelect, { target: { value: "success" } });
+    expect(screen.getByText("Output from success model")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText(/Connection refused to failed-model/i)).not.toBeInTheDocument();
+    });
+
+    // Filter back to 'all'
+    fireEvent.change(filterSelect, { target: { value: "all" } });
+    expect(await screen.findByText("Output from success model")).toBeInTheDocument();
+    expect(await screen.findByText(/Connection refused to failed-model/i)).toBeInTheDocument();
+  });
+
+  it("supports sorting results and waterfall table by tokens", async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      const isFirst = callCount % 2 === 1;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve({
+          choices: [{ message: { content: isFirst ? "Alpha model output with 15 tokens" : "Beta model output with 85 tokens" } }],
+          usage: { prompt_tokens: 10, completion_tokens: isFirst ? 5 : 75, total_tokens: isFirst ? 15 : 85 }
+        }),
+      });
+    });
+    (global as any).fetch = mockFetch;
+
+    render(<App />);
+
+    const modelListTextarea = screen.getByPlaceholderText(/myGemma3/i) as HTMLTextAreaElement;
+    fireEvent.change(modelListTextarea, { target: { value: "alpha-model\nbeta-model" } });
+
+    const generateBtn = screen.getByText("Generate");
+    fireEvent.click(generateBtn);
+
+    expect(await screen.findByText("Alpha model output with 15 tokens")).toBeInTheDocument();
+    expect(await screen.findByText("Beta model output with 85 tokens")).toBeInTheDocument();
+
+    // Verify quick sort tokens button exists in results header
+    const sortTokensQuickBtn = screen.getByTestId("quick-sort-tokens");
+    expect(sortTokensQuickBtn).toBeInTheDocument();
+    fireEvent.click(sortTokensQuickBtn);
+
+    // Verify sort tokens button exists in waterfall table
+    const sortTokensTableBtn = screen.getByTestId("sort-tokens-btn");
+    expect(sortTokensTableBtn).toBeInTheDocument();
+    fireEvent.click(sortTokensTableBtn);
   });
 });
 
