@@ -266,7 +266,7 @@ export function SupabaseConfigModal({ isOpen, onClose, onConfigSaved }: Supabase
                   </div>
                   <div>
                     <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Automatic Sync</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">Save benchmark runs directly to Supabase after execution</p>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">Insert results to Supabase after each run</p>
                   </div>
                 </div>
                 <input 

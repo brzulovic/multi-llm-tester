@@ -18,7 +18,8 @@ import {
   AlertCircle, 
   Loader2, 
   Info,
-  Maximize2
+  Maximize2,
+  RefreshCw
 } from "lucide-react";
 
 interface NetworkWaterfallPanelProps {
@@ -28,6 +29,7 @@ interface NetworkWaterfallPanelProps {
   sortField?: 'name' | 'state' | 'time' | 'speed' | 'tokens' | null;
   sortDirection?: 'asc' | 'desc';
   onSortChange?: (field: 'name' | 'state' | 'time' | 'speed' | 'tokens') => void;
+  onRetryModel?: (id: string, modelName: string) => void;
 }
 
 export function NetworkWaterfallPanel({ 
@@ -36,7 +38,8 @@ export function NetworkWaterfallPanel({
   selectedId,
   sortField: controlledSortField,
   sortDirection: controlledSortDirection,
-  onSortChange
+  onSortChange,
+  onRetryModel
 }: NetworkWaterfallPanelProps) {
   const [hoveredResult, setHoveredResult] = useState<string | null>(null);
   const [internalSortField, setInternalSortField] = useState<'name' | 'state' | 'time' | 'speed' | 'tokens' | null>(null);
@@ -413,11 +416,26 @@ export function NetworkWaterfallPanel({
                       </span>
                     )}
                     {result.status === "error" && (
-                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold ${
-                        result.isTimeout ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
-                      }`} title={result.isTimeout ? `Timed out after ${((result.metrics?.durationMs || 0)/1000).toFixed(1)}s` : result.error}>
-                        {result.statusCode || 500} {result.isTimeout && <Clock className="w-2.5 h-2.5 ml-0.5 text-amber-700 dark:text-amber-400" />}
-                      </span>
+                      <div className="inline-flex items-center gap-1">
+                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold ${
+                          result.isTimeout ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300'
+                        }`} title={result.isTimeout ? `Timed out after ${((result.metrics?.durationMs || 0)/1000).toFixed(1)}s` : result.error}>
+                          {result.statusCode || 500} {result.isTimeout && <Clock className="w-2.5 h-2.5 ml-0.5 text-amber-700 dark:text-amber-400" />}
+                        </span>
+                        {onRetryModel && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRetryModel(result.id, result.modelName);
+                            }}
+                            title={`Retry ${result.modelName}`}
+                            className="p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-950 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
                     {result.status === "idle" && (
                       <span className="text-gray-400 dark:text-gray-600 font-mono text-[10px]">-</span>

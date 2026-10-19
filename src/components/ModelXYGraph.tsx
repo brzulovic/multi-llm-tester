@@ -21,7 +21,11 @@ import {
   Layers, 
   Maximize2,
   Sliders,
-  Cpu
+  Cpu,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Move
 } from "lucide-react";
 
 export type MetricKey = 'durationMs' | 'tps' | 'totalTokens' | 'completionTokens' | 'ttfbMs' | 'promptTokens';
@@ -122,12 +126,48 @@ export const ModelXYGraph: React.FC<ModelXYGraphProps> = ({
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Zoom & Pan state for inspecting tightly clustered results
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(Number((prev * 1.35).toFixed(2)), 6));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => {
+      const next = Math.max(Number((prev / 1.35).toFixed(2)), 1);
+      if (next === 1) {
+        setPanOffset({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
   // SVG Chart Dimensions
   const svgWidth = 840;
   const svgHeight = 440;
   const padding = { top: 40, right: 50, bottom: 65, left: 75 };
   const plotWidth = svgWidth - padding.left - padding.right;
   const plotHeight = svgHeight - padding.top - padding.bottom;
+
+  // Native SVG dynamic viewBox for zoom and pan
+  const viewWidth = svgWidth / zoomLevel;
+  const viewHeight = svgHeight / zoomLevel;
+  const maxPanX = (svgWidth - viewWidth) / 2;
+  const maxPanY = (svgHeight - viewHeight) / 2;
+  const clampedPanX = Math.max(-maxPanX * 1.5, Math.min(maxPanX * 1.5, panOffset.x));
+  const clampedPanY = Math.max(-maxPanY * 1.5, Math.min(maxPanY * 1.5, panOffset.y));
+  const viewBoxX = (svgWidth - viewWidth) / 2 + clampedPanX;
+  const viewBoxY = (svgHeight - viewHeight) / 2 + clampedPanY;
 
   const xMetric = METRIC_OPTIONS[xAxisKey];
   const yMetric = METRIC_OPTIONS[yAxisKey];
@@ -284,6 +324,42 @@ export const ModelXYGraph: React.FC<ModelXYGraphProps> = ({
     }
   };
 
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.2 : 0.83;
+    setZoomLevel((prev) => {
+      const next = Math.min(Math.max(Number((prev * zoomFactor).toFixed(2)), 1), 6);
+      if (next === 1) {
+        setPanOffset({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomLevel > 1) {
+      setIsDragging(true);
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      panStartRef.current = { ...panOffset };
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    handlePointMouseMove(e);
+    if (isDragging && zoomLevel > 1) {
+      const dx = (e.clientX - dragStartRef.current.x) / zoomLevel;
+      const dy = (e.clientY - dragStartRef.current.y) / zoomLevel;
+      setPanOffset({
+        x: panStartRef.current.x - dx,
+        y: panStartRef.current.y - dy,
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -305,7 +381,7 @@ export const ModelXYGraph: React.FC<ModelXYGraphProps> = ({
             </h3>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Compare latency vs speed and inspect model architecture, context window, and capabilities on mouseover.
+            Compare latency vs speed and inspect model architecture, token capacity, and capabilities on mouseover.
           </p>
         </div>
 
@@ -346,18 +422,66 @@ export const ModelXYGraph: React.FC<ModelXYGraphProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Zoom Controls for Tight Results */}
+          <div className="flex items-center gap-1 bg-gray-50 dark:bg-[#161c28] p-1 rounded-xl border border-gray-200/70 dark:border-gray-700/70">
+            <span className="font-bold uppercase tracking-wider text-[10px] text-gray-400 dark:text-gray-500 px-1">Zoom:</span>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 1}
+              data-testid="xy-graph-zoom-out-btn"
+              className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors cursor-pointer"
+              title="Zoom out"
+            >
+              <ZoomOut className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
+            </button>
+            <span 
+              data-testid="xy-graph-zoom-level"
+              className="text-[11px] font-mono font-bold px-1.5 text-indigo-600 dark:text-indigo-400 min-w-[38px] text-center"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 6}
+              data-testid="xy-graph-zoom-in-btn"
+              className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors cursor-pointer"
+              title="Zoom in (tight results)"
+            >
+              <ZoomIn className="w-3.5 h-3.5 text-gray-700 dark:text-gray-300" />
+            </button>
+            {zoomLevel > 1 && (
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                data-testid="xy-graph-reset-zoom-btn"
+                className="px-1.5 py-0.5 text-[10px] font-bold text-gray-500 hover:text-indigo-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                title="Reset zoom to 100%"
+              >
+                <RotateCcw className="w-3 h-3" /> Reset
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Main Interactive Chart Canvas */}
+      {/* Main Interactive Chart Canvas with Zoom & Pan */}
       <div 
-        className="p-4 sm:p-6 overflow-x-auto select-none relative"
-        onMouseMove={handlePointMouseMove}
-        onMouseLeave={() => setHoveredPoint(null)}
+        className={`p-4 sm:p-6 overflow-x-auto select-none relative ${zoomLevel > 1 ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'}`}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          setHoveredPoint(null);
+          setIsDragging(false);
+        }}
       >
         <svg
-          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          className="w-full h-auto min-w-[620px] max-h-[460px] overflow-visible"
+          viewBox={`${viewBoxX} ${viewBoxY} ${viewWidth} ${viewHeight}`}
+          className="w-full h-auto min-w-[620px] max-h-[460px] overflow-visible transition-all duration-75"
         >
           {/* Subtle Optimal Quadrant Highlight (Low Latency / High Speed) */}
           {xAxisKey === 'durationMs' && yAxisKey === 'tps' && (
@@ -729,9 +853,20 @@ export const ModelXYGraph: React.FC<ModelXYGraphProps> = ({
           </div>
         </div>
 
-        <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
-          <Info className="w-3.5 h-3.5" />
-          <span>Hover over any model node for context window & architecture details</span>
+        <div className="text-[11px] text-gray-400 dark:text-gray-500 flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1">
+            <Info className="w-3.5 h-3.5" />
+            <span>Hover over any model node for detailed specifications & architecture</span>
+          </span>
+          {zoomLevel > 1 ? (
+            <span className="text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md">
+              <Move className="w-3 h-3" /> Drag chart to pan across tight points • Scroll to zoom
+            </span>
+          ) : (
+            <span className="text-gray-400 dark:text-gray-500 text-[10px]">
+              (Use Zoom controls or scroll wheel if results are tight)
+            </span>
+          )}
         </div>
       </div>
     </div>

@@ -59,7 +59,8 @@ import {
   Server,
   Globe,
   Filter,
-  TrendingUp
+  TrendingUp,
+  GripVertical
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -69,6 +70,7 @@ import { SupabaseConfigModal } from "./components/SupabaseConfigModal";
 import { ModelComparisonView } from "./components/ModelComparisonView";
 import { ModelXYGraph } from "./components/ModelXYGraph";
 import { DocumentationModal } from "./components/DocumentationModal";
+import { SystemPromptModal } from "./components/SystemPromptModal";
 import { COMMON_TEST_PROMPTS, NERDY_KINGS_PROMPTS, CLASSIC_TEST_PROMPTS } from "./data/prompts";
 import { convertHistoryToCSV, downloadCSV } from "./lib/csvExport";
 import {
@@ -263,6 +265,70 @@ export default function App() {
   const [timeoutSeconds, setTimeoutSeconds] = useState<number>(300); // Default 300s (5m) to allow 50s+ local models
   const [streamResponse, setStreamResponse] = useState<boolean>(true); // Streams SSE tokens to prevent idle timeout
   const [showLeftColumn, setShowLeftColumn] = useState<boolean>(true);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("llm_tester_sidebar_width");
+      if (saved) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 260 && parsed <= 850) {
+          return parsed;
+        }
+      }
+    }
+    return 380;
+  });
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState<boolean>(false);
+  const dragStartXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(380);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const [isLgScreen, setIsLgScreen] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsLgScreen(window.innerWidth >= 1024);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleSidebarDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingSidebar(true);
+    dragStartXRef.current = e.clientX;
+    startWidthRef.current = sidebarWidth;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+      const deltaX = moveEvent.clientX - dragStartXRef.current;
+      const minWidth = 260;
+      const maxWidth = Math.min(850, Math.floor(window.innerWidth * 0.65));
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidthRef.current + deltaX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("llm_tester_sidebar_width", String(sidebarWidth));
+    } catch {
+      // ignore
+    }
+  }, [sidebarWidth]);
+
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const historyFileInputRef = useRef<HTMLInputElement>(null);
@@ -270,12 +336,13 @@ export default function App() {
 
   // Custom System Prompt configuration & model-specific injection
   const [customSystemPrompt, setCustomSystemPrompt] = useState<string>(
-    "You are an expert AI assistant. Provide concise, high-accuracy responses following system directives."
+    "You are a meticulous technical analyst. Provide step-by-step reasoning, edge-case evaluation, and in-depth analysis."
   );
   const [enableSystemPrompt, setEnableSystemPrompt] = useState<boolean>(false);
   const [systemPromptMode, setSystemPromptMode] = useState<'specific' | 'all'>('specific');
   const [systemPromptTargetModels, setSystemPromptTargetModels] = useState<string[]>([]);
   const [showSystemPromptField, setShowSystemPromptField] = useState<boolean>(false);
+  const [isSystemPromptModalOpen, setIsSystemPromptModalOpen] = useState<boolean>(false);
 
   const configuredModels = React.useMemo(() => {
     return modelList
@@ -727,6 +794,23 @@ export default function App() {
       setCustomHeaders(headersVal);
       setShowCustomHeadersField(true);
     }
+
+    // Ensure when clicking a history run, model list is filled
+    const modelsList = (entry.models && entry.models.length > 0)
+      ? entry.models
+      : (entry.results?.map(r => r.modelName).filter(Boolean) || []);
+    if (modelsList.length > 0) {
+      setModelList(modelsList.join("\n"));
+    }
+
+    if (entry.systemPrompt) {
+      setCustomSystemPrompt(entry.systemPrompt);
+      setEnableSystemPrompt(true);
+    }
+    if (entry.systemPromptTargetModels && entry.systemPromptTargetModels.length > 0) {
+      setSystemPromptTargetModels(entry.systemPromptTargetModels);
+    }
+
     setResults(entry.results);
     goToSection("prompt");
   };
@@ -791,6 +875,7 @@ export default function App() {
         customHeaders,
         headers: customHeaders,
         results: [...results],
+        models: results.map(r => r.modelName),
         systemPrompt: enableSystemPrompt ? customSystemPrompt : undefined,
         systemPromptTargetModels: enableSystemPrompt ? systemPromptTargetModels : undefined,
       };
@@ -870,13 +955,51 @@ export default function App() {
     });
   };
 
+  const retryFailedResults = async () => {
+    const failedResults = results.filter((r) => r.status === "error");
+    if (failedResults.length === 0 || isGenerating) return;
+
+    setIsGenerating(true);
+    setResults((prev) =>
+      prev.map((r) =>
+        r.status === "error"
+          ? { ...r, status: "idle", output: "", error: undefined, isTimeout: undefined }
+          : r
+      )
+    );
+
+    try {
+      if (isParallel) {
+        const queue = [...failedResults];
+        const runWorker = async () => {
+          while (queue.length > 0) {
+            const item = queue.shift();
+            if (!item) break;
+            await processModel(item.id, item.modelName);
+          }
+        };
+        const workers = Array.from(
+          { length: Math.min(parallelCount, failedResults.length) },
+          () => runWorker()
+        );
+        await Promise.all(workers);
+      } else {
+        for (const item of failedResults) {
+          await processModel(item.id, item.modelName);
+        }
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const processModel = async (id: string, modelName: string) => {
     const queueMs = sessionStartTimeRef.current > 0 
       ? Math.max(0, performance.now() - sessionStartTimeRef.current) 
       : 0;
 
     setResults((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: "pending", startTimeOffsetMs: queueMs } : r))
+      prev.map((r) => (r.id === id ? { ...r, status: "pending", startTimeOffsetMs: queueMs, output: "", error: undefined, isTimeout: undefined } : r))
     );
 
     const fetchStartTime = performance.now();
@@ -1424,10 +1547,18 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
+      <main 
+        ref={mainContainerRef}
+        className={`max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col lg:flex-row gap-4 lg:gap-0 items-start relative ${
+          isDraggingSidebar ? 'cursor-col-resize select-none' : ''
+        }`}
+      >
         {/* Sidebar Controls - Toggled View Column */}
         {showLeftColumn && (
-        <div className="lg:col-span-4 space-y-3">
+        <div 
+          style={{ width: isLgScreen ? `${sidebarWidth}px` : '100%' }}
+          className="space-y-3 shrink-0 transition-[width] duration-75 lg:pr-2.5 w-full"
+        >
           {/* Column View Section Switcher / Navigation */}
           <div className="bg-white/95 dark:bg-[#111622]/95 rounded-2xl p-1 shadow-xs border border-gray-200/80 dark:border-gray-800 flex items-center gap-1 sticky top-[58px] z-10 backdrop-blur-sm">
             <button 
@@ -1771,34 +1902,50 @@ export default function App() {
                   {/* Custom System Prompt Section */}
                   <div className="rounded-xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-[#0f131c]/50 overflow-hidden">
                     <div 
-                      onClick={() => setShowSystemPromptField(prev => !prev)}
-                      className="p-3 flex items-center justify-between cursor-pointer select-none hover:bg-gray-100/60 dark:hover:bg-gray-800/40 transition-colors"
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={showSystemPromptField}
-                      aria-label="Toggle Custom System Prompt configuration"
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowSystemPromptField(prev => !prev); } }}
-                      data-testid="toggle-system-prompt-field"
+                      className="p-3 flex items-center justify-between select-none hover:bg-gray-100/60 dark:hover:bg-gray-800/40 transition-colors"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 group/sysprompt">
                         <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                        <div>
-                          <label className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <label 
+                            onClick={() => setIsSystemPromptModalOpen(true)}
+                            className="block text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                          >
                             Custom System Prompt
                           </label>
-                          <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                            {enableSystemPrompt 
-                              ? (systemPromptMode === 'all' 
-                                  ? 'Active on all models' 
-                                  : (systemPromptTargetModels.length > 0 
-                                      ? `Active on ${systemPromptTargetModels.length} specific ${systemPromptTargetModels.length === 1 ? 'model' : 'models'}` 
-                                      : 'Enabled (No specific models selected)'))
-                              : 'Disabled (Injects into payload for specific models)'}
-                          </p>
+
+                          {/* Disabled and Disabled message next CUSTOM SYSTEM PROMPT is hidden and shown on hovering this text */}
+                          {!enableSystemPrompt ? (
+                            <span 
+                              data-testid="sys-prompt-disabled-msg"
+                              className="text-[10px] font-medium text-gray-400 dark:text-gray-500 opacity-0 group-hover/sysprompt:opacity-100 transition-opacity duration-200 bg-gray-200/60 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-300/60 dark:border-gray-700 select-none cursor-pointer"
+                              onClick={() => setIsSystemPromptModalOpen(true)}
+                            >
+                              Disabled (Injects into payload for specific models)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100/70 dark:bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-200 dark:border-purple-800">
+                              {systemPromptMode === 'all' 
+                                ? `Active on all ${configuredModels.length} models` 
+                                : `Active on ${systemPromptTargetModels.length} specific ${systemPromptTargetModels.length === 1 ? 'model' : 'models'}`}
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Open Layer Button */}
+                        <button
+                          type="button"
+                          onClick={() => setIsSystemPromptModalOpen(true)}
+                          data-testid="open-system-prompt-layer-btn"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-white dark:bg-[#161c28] hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 transition-all cursor-pointer shadow-2xs"
+                          title="Open Custom System Prompt configuration layer"
+                        >
+                          <Layers className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                          <span>Open Layer</span>
+                        </button>
+
                         {/* Quick Enable Toggle Checkbox */}
                         <div 
                           onClick={(e) => e.stopPropagation()} 
@@ -1809,6 +1956,7 @@ export default function App() {
                             id="enable-system-prompt-checkbox"
                             data-testid="enable-system-prompt-checkbox"
                             checked={enableSystemPrompt}
+                            aria-hidden="true"
                             onChange={(e) => {
                               const checked = e.target.checked;
                               setEnableSystemPrompt(checked);
@@ -1823,7 +1971,16 @@ export default function App() {
                           </label>
                         </div>
 
-                        {showSystemPromptField ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                        {/* Inline field toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setShowSystemPromptField(prev => !prev)}
+                          data-testid="toggle-system-prompt-field"
+                          aria-label="Toggle Custom System Prompt configuration"
+                          className="p-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                        >
+                          {showSystemPromptField ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                        </button>
                       </div>
                     </div>
 
@@ -2522,8 +2679,34 @@ export default function App() {
       </div>
       )}
 
+      {/* Draggable & Expandable Resizer Handle */}
+      {showLeftColumn && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          data-testid="layout-resizer"
+          onMouseDown={handleSidebarDragStart}
+          onDoubleClick={() => setSidebarWidth(380)}
+          title="Drag to resize sidebar width (Double click to reset to default 380px)"
+          className={`hidden lg:flex flex-col items-center justify-center w-3.5 hover:w-3.5 cursor-col-resize self-stretch shrink-0 group transition-colors select-none z-10 px-0.5 relative ${
+            isDraggingSidebar ? 'bg-indigo-500/25' : 'hover:bg-indigo-500/10'
+          }`}
+        >
+          <div className={`w-1 h-14 rounded-full transition-colors flex items-center justify-center ${
+            isDraggingSidebar ? 'bg-indigo-600 dark:bg-indigo-400' : 'bg-gray-300 dark:bg-gray-700 group-hover:bg-indigo-500 dark:group-hover:bg-indigo-400'
+          }`}>
+            <GripVertical className="w-2.5 h-2.5 text-white opacity-0 group-hover:opacity-100" />
+          </div>
+          {isDraggingSidebar && (
+            <div className="absolute top-1/2 -translate-y-1/2 left-4 bg-indigo-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-30 whitespace-nowrap">
+              {sidebarWidth}px
+            </div>
+          )}
+        </div>
+      )}
+
         {/* Results Display */}
-        <div id="section-results" className={showLeftColumn ? "lg:col-span-8" : "lg:col-span-12 transition-all"}>
+        <div id="section-results" className="flex-1 min-w-0 w-full transition-all lg:pl-2.5">
           {results.length === 0 && viewMode !== "compare" && viewMode !== "graph" ? (
             <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-white dark:bg-[#111622] rounded-3xl border border-dashed border-gray-200 dark:border-gray-800">
               <div className="w-16 h-16 bg-gray-50 dark:bg-[#0b0f17] rounded-2xl flex items-center justify-center mb-4">
@@ -2581,6 +2764,19 @@ export default function App() {
                         <Loader2 className="w-3 h-3 animate-spin text-indigo-600 dark:text-indigo-400" />
                         <span className="hidden sm:inline">Saving to Supabase...</span>
                       </span>
+                    )}
+                    {statusCounts.error > 0 && (
+                      <button
+                        type="button"
+                        onClick={retryFailedResults}
+                        disabled={isGenerating}
+                        data-testid="retry-all-failed-btn"
+                        className="flex items-center gap-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+                        title="Retry all failed model benchmarks"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-red-600 dark:text-red-400 ${isGenerating ? 'animate-spin' : ''}`} />
+                        <span>Retry Failed ({statusCounts.error})</span>
+                      </button>
                     )}
                   </h2>
 
@@ -2801,6 +2997,7 @@ export default function App() {
                     sortField={sortField}
                     sortDirection={sortDirection}
                     onSortChange={handleSortChange}
+                    onRetryModel={processModel}
                     onSelectResult={(id) => {
                       setSelectedResultId(id);
                       if (viewMode === "waterfall") {
@@ -2927,6 +3124,21 @@ export default function App() {
                               </button>
                             </div>
                           )}
+
+                          {result.status === 'error' && (
+                            <div className="flex items-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={() => processModel(result.id, result.modelName)}
+                                data-testid={`retry-button-${result.id}`}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title={`Retry benchmark for ${result.modelName}`}
+                              >
+                                <RefreshCw className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                                <span>Retry</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Card Body */}
@@ -2971,6 +3183,18 @@ export default function App() {
                                     )}
                                   </div>
                                   <p className="text-xs text-red-600 dark:text-red-400 mt-1 leading-relaxed font-mono break-all">{result.error}</p>
+                                  <div className="mt-2.5 flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => processModel(result.id, result.modelName)}
+                                      data-testid={`retry-action-${result.id}`}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs transition-all cursor-pointer"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                      <span>Retry Request</span>
+                                    </button>
+                                    <span className="text-[11px] text-red-600/70 dark:text-red-400/70">Re-run query for {result.modelName}</span>
+                                  </div>
                                 </div>
                               </div>
 
@@ -3301,6 +3525,22 @@ export default function App() {
         isOpen={isDocsModalOpen}
         onClose={() => setIsDocsModalOpen(false)}
         initialTab={docsModalTab}
+      />
+
+      {/* Custom System Prompt Layer Modal */}
+      <SystemPromptModal
+        isOpen={isSystemPromptModalOpen}
+        onClose={() => setIsSystemPromptModalOpen(false)}
+        customSystemPrompt={customSystemPrompt}
+        setCustomSystemPrompt={setCustomSystemPrompt}
+        enableSystemPrompt={enableSystemPrompt}
+        setEnableSystemPrompt={setEnableSystemPrompt}
+        systemPromptMode={systemPromptMode}
+        setSystemPromptMode={setSystemPromptMode}
+        systemPromptTargetModels={systemPromptTargetModels}
+        setSystemPromptTargetModels={setSystemPromptTargetModels}
+        configuredModels={configuredModels}
+        toggleSystemPromptModel={toggleSystemPromptModel}
       />
     </div>
   );

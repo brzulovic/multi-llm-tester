@@ -1164,6 +1164,191 @@ describe("LLM Multi-Tester App", () => {
     const viewGridBtn = screen.getByTestId("supabase-view-data-grid-btn");
     expect(viewGridBtn).toBeInTheDocument();
   });
+
+  it("opens up a layer for Custom System Prompt with presets, directive, and target models", async () => {
+    render(<App />);
+
+    // Click "Open Layer" button
+    const openLayerBtn = screen.getByTestId("open-system-prompt-layer-btn");
+    expect(openLayerBtn).toBeInTheDocument();
+    fireEvent.click(openLayerBtn);
+
+    // Verify layer dialog and title
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Custom System Prompt Layer")).toBeInTheDocument();
+
+    // Verify presets are present
+    expect(screen.getByText("Concise Expert")).toBeInTheDocument();
+    expect(screen.getByText("Deep Analyst")).toBeInTheDocument();
+    expect(screen.getByText("Code Architect")).toBeInTheDocument();
+
+    // Verify System Directive Content textarea
+    const directiveInput = screen.getByTestId("layer-system-prompt-textarea");
+    expect(directiveInput).toBeInTheDocument();
+
+    // Verify Target Models toggle buttons
+    expect(screen.getByTestId("layer-system-prompt-mode-specific")).toBeInTheDocument();
+    expect(screen.getByTestId("layer-system-prompt-mode-all")).toBeInTheDocument();
+
+    // Click "All Models" mode
+    fireEvent.click(screen.getByTestId("layer-system-prompt-mode-all"));
+    expect(screen.getByText(/System prompt will be injected into payloads for/i)).toBeInTheDocument();
+
+    // Close layer
+    const closeBtn = screen.getByTestId("close-system-prompt-layer-btn");
+    fireEvent.click(closeBtn);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("hides disabled message next to Custom System Prompt and displays it on hover container", () => {
+    render(<App />);
+    const disabledMsg = screen.getByTestId("sys-prompt-disabled-msg");
+    expect(disabledMsg).toBeInTheDocument();
+    // Class contains opacity-0 and group-hover/sysprompt:opacity-100
+    expect(disabledMsg.className).toContain("opacity-0");
+    expect(disabledMsg.className).toContain("group-hover/sysprompt:opacity-100");
+  });
+
+  it("provides retry button for failed results and supports retrying all failed models", async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) {
+        return Promise.reject(new Error("Connection timeout"));
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: () => Promise.resolve({
+          choices: [{ message: { content: "Retry recovered successfully" } }],
+          usage: { prompt_tokens: 10, completion_tokens: 15, total_tokens: 25 }
+        })
+      });
+    });
+    (global as any).fetch = mockFetch;
+
+    render(<App />);
+
+    // Trigger generate
+    const generateBtn = screen.getByText("Generate");
+    fireEvent.click(generateBtn);
+
+    // Wait for failure
+    await waitFor(() => {
+      expect(screen.getByText(/Failed/i)).toBeInTheDocument();
+    });
+
+    // Check individual retry button exists
+    const retryBtn = screen.getByText("Retry Request");
+    expect(retryBtn).toBeInTheDocument();
+
+    // Check retry all failed button in top bar
+    const retryAllBtn = screen.getByTestId("retry-all-failed-btn");
+    expect(retryAllBtn).toBeInTheDocument();
+
+    // Click retry
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText("Retry recovered successfully")).toBeInTheDocument();
+    });
+  });
+
+  it("supports zooming in, zooming out, and resetting zoom in XY Graph", () => {
+    render(<App />);
+
+    // Open XY graph
+    const openGraphBtn = screen.getByTestId("empty-open-graph-btn");
+    fireEvent.click(openGraphBtn);
+
+    // Check zoom controls
+    const zoomLevelEl = screen.getByTestId("xy-graph-zoom-level");
+    expect(zoomLevelEl).toHaveTextContent("100%");
+
+    const zoomInBtn = screen.getByTestId("xy-graph-zoom-in-btn");
+    const zoomOutBtn = screen.getByTestId("xy-graph-zoom-out-btn");
+
+    // Click zoom in
+    fireEvent.click(zoomInBtn);
+    expect(zoomLevelEl).toHaveTextContent("135%");
+
+    // Reset button should now be visible
+    const resetZoomBtn = screen.getByTestId("xy-graph-reset-zoom-btn");
+    expect(resetZoomBtn).toBeInTheDocument();
+
+    // Click reset
+    fireEvent.click(resetZoomBtn);
+    expect(zoomLevelEl).toHaveTextContent("100%");
+  });
+
+  it("fills model list when clicking a history run", () => {
+    const sampleHistory = [
+      {
+        id: "hist-restore-test",
+        timestamp: Date.now(),
+        prompt: "Historical prompt for test",
+        endpoint: "https://api.openai.com/v1",
+        results: [
+          {
+            id: "model-1",
+            modelName: "claude-3-5-sonnet",
+            status: "success",
+            output: "Output 1",
+            metrics: { durationMs: 1200, tokensPerSecond: 45, totalTokens: 100 }
+          },
+          {
+            id: "model-2",
+            modelName: "gpt-4o",
+            status: "success",
+            output: "Output 2",
+            metrics: { durationMs: 900, tokensPerSecond: 60, totalTokens: 120 }
+          }
+        ],
+        models: ["claude-3-5-sonnet", "gpt-4o"]
+      }
+    ];
+    localStorage.setItem("llm_tester_history", JSON.stringify(sampleHistory));
+
+    render(<App />);
+
+    // Model list starts with default
+    const modelTextarea = screen.getByPlaceholderText(/myGemma3/i) as HTMLTextAreaElement;
+    expect(modelTextarea.value).toBe("free");
+
+    // Go to History section
+    const historyTab = screen.getByTestId("tab-history");
+    fireEvent.click(historyTab);
+
+    // Click on history entry
+    const entryEl = screen.getByText("Historical prompt for test");
+    fireEvent.click(entryEl);
+
+    // Verify model list is now filled with models from history
+    expect(modelTextarea.value).toBe("claude-3-5-sonnet\ngpt-4o");
+    expect((screen.getByPlaceholderText(/Enter your prompt/i) as HTMLTextAreaElement).value).toBe("Historical prompt for test");
+  });
+
+  it("renders layout resizer handle and allows dragging left layout to expand", () => {
+    render(<App />);
+
+    const resizer = screen.getByTestId("layout-resizer");
+    expect(resizer).toBeInTheDocument();
+
+    // Start dragging
+    fireEvent.mouseDown(resizer, { clientX: 380 });
+    // Move mouse to expand
+    fireEvent.mouseMove(window, { clientX: 500 });
+    // Release
+    fireEvent.mouseUp(window);
+
+    // Verify stored width
+    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("500");
+
+    // Double click to reset
+    fireEvent.doubleClick(resizer);
+    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("380");
+  });
 });
 
 

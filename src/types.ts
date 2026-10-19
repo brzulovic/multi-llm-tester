@@ -39,6 +39,7 @@ export interface HistoryEntry {
   customHeaders?: string;
   headers?: string;
   results: ModelResult[];
+  models?: string[];
   systemPrompt?: string;
   systemPromptTargetModels?: string[];
 }
