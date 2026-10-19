@@ -297,6 +297,7 @@ export async function insertBenchmarkRunToSupabase(
         ttft_ms: r.metrics?.ttfbMs ?? null,
         tokens_per_sec: r.metrics?.tokensPerSecond ?? null,
         token_count: r.metrics?.totalTokens ?? null,
+        rating: r.rating || null,
         timing_breakdown: r.metrics ? {
           durationMs: r.metrics.durationMs,
           ttfbMs: r.metrics.ttfbMs,
@@ -397,4 +398,37 @@ export async function fetchSupabaseTableData(
     return { data: [], count: null, error: err?.message || 'Failed to query Supabase table' };
   }
 }
+
+/**
+ * Updates the rating ('up' | 'down' | null) for a specific model result in Supabase.
+ */
+export async function updateResultRatingInSupabase(
+  resultId: string,
+  rating: 'up' | 'down' | null
+): Promise<{ success: boolean; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, error: 'Supabase is not configured.' };
+  }
+
+  const tables = getTableNames();
+
+  try {
+    const { error } = await client
+      .from(tables.results)
+      .update({ rating: rating || null })
+      .eq('id', resultId);
+
+    if (error) {
+      console.error('[Supabase] Error updating result rating:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Supabase] Exception during updateResultRatingInSupabase:', err);
+    return { success: false, error: err?.message || 'Unexpected error while updating rating' };
+  }
+}
+
 

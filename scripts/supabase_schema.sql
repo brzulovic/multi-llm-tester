@@ -74,10 +74,14 @@ CREATE TABLE IF NOT EXISTS public.llm_benchmark_results (
     ttft_ms NUMERIC,
     tokens_per_sec NUMERIC,
     token_count INTEGER,
+    rating TEXT,
     timing_breakdown JSONB,
     diagnostics JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Ensure rating column exists if table was already created
+ALTER TABLE IF EXISTS public.llm_benchmark_results ADD COLUMN IF NOT EXISTS rating TEXT;
 
 -- ---------------------------------------------------------------------
 -- Compatibility Views for alternate prefix llm_tester_

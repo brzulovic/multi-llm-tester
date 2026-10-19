@@ -699,7 +699,13 @@ export default function App() {
             prompt: prompt || "Imported benchmark results",
             endpoint,
             customHeaders,
-            results: imported
+            results: imported,
+            isParallel: false,
+            parallelCount: 2,
+            streamResponse: true,
+            timeoutSeconds: 300,
+            enableSystemPrompt: false,
+            systemPromptMode: 'specific',
           };
           setHistory(prev => [newEntry, ...prev].slice(0, 100));
           setImportStatus({ type: 'success', message: "Imported benchmark results as a new history session!" });
@@ -726,7 +732,13 @@ export default function App() {
             prompt: imported.prompt || "",
             endpoint: imported.endpoint || endpoint,
             customHeaders: imported.customHeaders ?? imported.headers ?? customHeaders,
-            results: imported.results || []
+            results: imported.results || [],
+            isParallel: imported.isParallel ?? false,
+            parallelCount: imported.parallelCount ?? 2,
+            streamResponse: imported.streamResponse ?? true,
+            timeoutSeconds: imported.timeoutSeconds ?? 300,
+            enableSystemPrompt: imported.enableSystemPrompt ?? false,
+            systemPromptMode: imported.systemPromptMode ?? 'specific',
           };
           setHistory(prev => [entry, ...prev].slice(0, 100));
           const replacedItems = [replacedEndpoint && "API endpoint", replacedHeaders && "headers"].filter(Boolean).join(" & ");
@@ -3458,13 +3470,16 @@ export default function App() {
                                     <div className="space-y-3">
                                       <div className="flex items-center justify-between text-xs font-mono text-gray-500 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
                                         <span className="flex items-center gap-1.5 font-bold text-indigo-600 dark:text-indigo-400">
-                                          <Globe className="w-3.5 h-3.5" /> Nicely Framed Live HTML Preview
+                                          <Globe className="w-3.5 h-3.5" /> Framed Live HTML Sandbox
                                         </span>
-                                        <span>Rendered Sandbox</span>
+                                        <span>Isolated Iframe</span>
                                       </div>
-                                      <div className="p-4 bg-white dark:bg-white text-gray-900 rounded-xl border border-gray-200 shadow-inner overflow-auto min-h-[220px] max-h-[500px]">
-                                        <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
-                                      </div>
+                                      <iframe
+                                        className="w-full h-[500px] bg-white rounded-xl border border-gray-200 shadow-inner"
+                                        srcDoc={`<!DOCTYPE html><html><head><style>body { font-family: sans-serif; padding: 1rem; }</style></head><body>${htmlContent}</body></html>`}
+                                        title="HTML Preview"
+                                        sandbox="allow-scripts"
+                                      />
                                     </div>
                                   );
                                 }

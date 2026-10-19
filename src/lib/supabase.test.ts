@@ -82,7 +82,13 @@ describe('Supabase Integration Module', () => {
             ttfbMs: 40
           }
         }
-      ]
+      ],
+      isParallel: false,
+      parallelCount: 1,
+      streamResponse: false,
+      timeoutSeconds: 30,
+      enableSystemPrompt: false,
+      systemPromptMode: 'specific'
     };
 
     const result = await insertBenchmarkRunToSupabase(sampleEntry);

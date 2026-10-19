@@ -29,6 +29,7 @@ export interface ModelResult {
   rawErrorDetails?: string;
   hasSystemPrompt?: boolean;
   systemPrompt?: string;
+  rating?: 'up' | 'down' | null;
 }
 
 export interface HistoryEntry {
