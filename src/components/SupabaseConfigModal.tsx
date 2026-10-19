@@ -18,7 +18,8 @@ import {
   FolderKanban,
   Table as TableIcon,
   Sliders,
-  Layers
+  Layers,
+  Activity
 } from 'lucide-react';
 import { 
   getSupabaseConfig, 
@@ -33,9 +34,16 @@ interface SupabaseConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfigSaved?: () => void;
+  syncLogs?: Array<{
+    id: string;
+    timestamp: number;
+    status: 'success' | 'error' | 'syncing';
+    message: string;
+    runId?: string;
+  }>;
 }
 
-export function SupabaseConfigModal({ isOpen, onClose, onConfigSaved }: SupabaseConfigModalProps) {
+export function SupabaseConfigModal({ isOpen, onClose, onConfigSaved, syncLogs = [] }: SupabaseConfigModalProps) {
   const [url, setUrl] = useState('');
   const [anonKey, setAnonKey] = useState('');
   const [tablePrefix, setTablePrefix] = useState(DEFAULT_TABLE_PREFIX);
@@ -326,6 +334,46 @@ export function SupabaseConfigModal({ isOpen, onClose, onConfigSaved }: Supabase
                 <p className="text-gray-400 pt-1"># Or verify connectivity:</p>
                 <p className="text-indigo-300">make supabase-verify</p>
               </div>
+            </div>
+
+            {/* Sync Log Panel */}
+            <div className="p-4 bg-gray-50 dark:bg-[#0b0f17] rounded-xl border border-gray-100 dark:border-gray-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                  Supabase Sync Log ({syncLogs.length})
+                </span>
+                <span className="text-[10px] text-gray-400 font-mono">Recent database operations</span>
+              </div>
+
+              {syncLogs.length === 0 ? (
+                <div className="py-6 text-center text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-[#111622] rounded-lg border border-dashed border-gray-200 dark:border-gray-800">
+                  No sync operations logged yet. Run a benchmark with Auto Sync enabled.
+                </div>
+              ) : (
+                <div className="max-h-[180px] overflow-y-auto custom-scrollbar space-y-1.5 pr-1 font-mono text-[11px]">
+                  {syncLogs.map((log) => {
+                    const badgeColor = 
+                      log.status === 'success' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' :
+                      log.status === 'error' ? 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800' :
+                      'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 animate-pulse';
+
+                    return (
+                      <div key={log.id} className="p-2 bg-white dark:bg-[#111622] rounded-lg border border-gray-200/80 dark:border-gray-800 flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 border ${badgeColor}`}>
+                            {log.status}
+                          </span>
+                          <span className="text-gray-800 dark:text-gray-200 truncate">{log.message}</span>
+                        </div>
+                        <span className="text-gray-400 dark:text-gray-500 text-[10px] shrink-0">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}

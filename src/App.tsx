@@ -60,7 +60,11 @@ import {
   Globe,
   Filter,
   TrendingUp,
-  GripVertical
+  GripVertical,
+  Code,
+  FileText,
+  Eye,
+  Share2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -362,13 +366,22 @@ export default function App() {
     });
   };
 
-  // Supabase Database Integration state
+  // Display mode per result: 'formatted' | 'raw' | 'md' | 'html'
+  const [resultDisplayModes, setResultDisplayModes] = useState<Record<string, 'formatted' | 'raw' | 'md' | 'html'>>({});
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<{
     status: 'idle' | 'syncing' | 'synced' | 'error';
     message?: string;
     runId?: string;
+    timestamp?: number;
   } | null>(null);
+  const [supabaseSyncLogs, setSupabaseSyncLogs] = useState<Array<{
+    id: string;
+    timestamp: number;
+    status: 'success' | 'error' | 'syncing';
+    message: string;
+    runId?: string;
+  }>>([]);
   const lastInsertedRunIdRef = useRef<string | null>(null);
 
   // Documentation & Reference Modal state
@@ -895,28 +908,74 @@ export default function App() {
 
         if (supabaseConfig.autoSync && supabaseConfig.url && supabaseConfig.anonKey) {
           setSupabaseSyncStatus({ status: 'syncing', runId: newEntry.id });
+          setSupabaseSyncLogs(prev => [
+            {
+              id: `log-${Date.now()}-syncing`,
+              timestamp: Date.now(),
+              status: 'syncing',
+              message: `Syncing run ${newEntry.id.slice(0, 8)} to Supabase...`,
+              runId: newEntry.id
+            },
+            ...prev
+          ].slice(0, 30));
+
           insertBenchmarkRunToSupabase(newEntry, { isParallel, parallelCount })
             .then((res) => {
+              const now = Date.now();
               if (res.success) {
                 setSupabaseSyncStatus({
                   status: 'synced',
                   message: `Saved ${res.insertedCount} results to Supabase`,
-                  runId: newEntry.id
+                  runId: newEntry.id,
+                  timestamp: now
                 });
+                setSupabaseSyncLogs(prev => [
+                  {
+                    id: `log-${now}-success`,
+                    timestamp: now,
+                    status: 'success',
+                    message: `Successfully saved ${res.insertedCount} results for run ${newEntry.id.slice(0, 8)}`,
+                    runId: newEntry.id
+                  },
+                  ...prev
+                ].slice(0, 30));
               } else {
+                const errMsg = res.error || 'Failed to insert into Supabase';
                 setSupabaseSyncStatus({
                   status: 'error',
-                  message: res.error || 'Failed to insert into Supabase',
+                  message: errMsg,
                   runId: newEntry.id
                 });
+                setSupabaseSyncLogs(prev => [
+                  {
+                    id: `log-${now}-error`,
+                    timestamp: now,
+                    status: 'error',
+                    message: errMsg,
+                    runId: newEntry.id
+                  },
+                  ...prev
+                ].slice(0, 30));
               }
             })
             .catch((err) => {
+              const now = Date.now();
+              const errMsg = err?.message || 'Error inserting into Supabase';
               setSupabaseSyncStatus({
                 status: 'error',
-                message: err?.message || 'Error inserting into Supabase',
+                message: errMsg,
                 runId: newEntry.id
               });
+              setSupabaseSyncLogs(prev => [
+                {
+                  id: `log-${now}-error`,
+                  timestamp: now,
+                  status: 'error',
+                  message: errMsg,
+                  runId: newEntry.id
+                },
+                ...prev
+              ].slice(0, 30));
             });
         }
       }
@@ -956,13 +1015,17 @@ export default function App() {
   };
 
   const retryFailedResults = async () => {
-    const failedResults = results.filter((r) => r.status === "error");
-    if (failedResults.length === 0 || isGenerating) return;
+    await bulkRetry('error');
+  };
+
+  const bulkRetry = async (status: 'error' | 'pending' | 'idle') => {
+    const targets = results.filter((r) => r.status === status);
+    if (targets.length === 0 || isGenerating) return;
 
     setIsGenerating(true);
     setResults((prev) =>
       prev.map((r) =>
-        r.status === "error"
+        r.status === status
           ? { ...r, status: "idle", output: "", error: undefined, isTimeout: undefined }
           : r
       )
@@ -970,7 +1033,7 @@ export default function App() {
 
     try {
       if (isParallel) {
-        const queue = [...failedResults];
+        const queue = [...targets];
         const runWorker = async () => {
           while (queue.length > 0) {
             const item = queue.shift();
@@ -979,17 +1042,37 @@ export default function App() {
           }
         };
         const workers = Array.from(
-          { length: Math.min(parallelCount, failedResults.length) },
+          { length: Math.min(parallelCount, targets.length) },
           () => runWorker()
         );
         await Promise.all(workers);
       } else {
-        for (const item of failedResults) {
+        for (const item of targets) {
           await processModel(item.id, item.modelName);
         }
       }
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleShare = () => {
+    const state = {
+      prompt,
+      modelList,
+      customSystemPrompt,
+      isParallel,
+      parallelCount,
+      results: results.filter(r => r.status === 'success'),
+    };
+    try {
+      const encodedState = btoa(JSON.stringify(state));
+      const url = `${window.location.origin}${window.location.pathname}#share=${encodedState}`;
+      navigator.clipboard.writeText(url);
+      alert('Shareable link copied to clipboard!');
+    } catch (e) {
+      console.error("Failed to generate share link", e);
+      alert("Failed to generate share link");
     }
   };
 
@@ -1452,6 +1535,18 @@ export default function App() {
               ) : isSupabaseConfigured() ? (
                 <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-0.5 -right-0.5 ring-2 ring-white dark:ring-[#111622]" />
               ) : null}
+            </button>
+
+            {/* Share button */}
+            <button
+              type="button"
+              onClick={handleShare}
+              data-testid="header-share-btn"
+              aria-label="Share benchmark results"
+              title="Share benchmark results"
+              className="flex items-center justify-center p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition-all cursor-pointer border border-gray-200/70 dark:border-gray-700 shadow-2xs"
+            >
+              <Share2 className="w-4 h-4" />
             </button>
 
             {/* Documentation & Reference Modal button */}
@@ -2190,6 +2285,52 @@ export default function App() {
                       className="w-full px-3 py-2 bg-gray-50 dark:bg-[#0b0f17] border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all min-h-[96px] font-mono leading-relaxed"
                       placeholder="free&#10;myGemma3&#10;myGroq"
                     />
+                    
+                    {/* Active Model Status Badges & Supabase Insert/Update Ticker */}
+                    <div className="mt-2 flex flex-col gap-2">
+                      {results.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gray-50 dark:bg-[#0b0f17] rounded-xl border border-gray-100 dark:border-gray-800">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 mr-1">Status:</span>
+                          {results.map((res) => {
+                            const statusColor = 
+                              res.status === 'success' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' :
+                              res.status === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-950/70 dark:text-red-300 border-red-200 dark:border-red-800' :
+                              res.status === 'pending' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200 dark:border-amber-800 animate-pulse' :
+                              'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700';
+
+                            return (
+                              <span 
+                                key={res.id}
+                                data-testid={`model-status-badge-${res.modelName}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusColor}`}
+                                title={`Model: ${res.modelName} - State: ${res.status}${res.status === 'error' && res.error ? `\nError: ${res.error}` : ''}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  res.status === 'success' ? 'bg-emerald-500' :
+                                  res.status === 'error' ? 'bg-red-500' :
+                                  res.status === 'pending' ? 'bg-amber-500 animate-ping' :
+                                  'bg-gray-400'
+                                }`} />
+                                <span className="truncate max-w-[100px]">{res.modelName}</span>
+                                <span className="opacity-75 text-[9px] capitalize">({res.status})</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {supabaseSyncStatus?.status === 'synced' && supabaseSyncStatus.timestamp && (
+                        <div className="flex items-center justify-between px-2.5 py-1.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/50 rounded-lg text-[10px] text-emerald-800 dark:text-emerald-300">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <Database className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span>Supabase last inserted/updated:</span>
+                          </div>
+                          <span className="font-mono font-bold">
+                            {new Date(supabaseSyncStatus.timestamp).toLocaleTimeString()} ({Math.round((Date.now() - supabaseSyncStatus.timestamp) / 1000)}s ago)
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-2">
@@ -2768,18 +2909,30 @@ export default function App() {
                         <span className="hidden sm:inline">Saving to Supabase...</span>
                       </span>
                     )}
-                    {statusCounts.error > 0 && (
-                      <button
-                        type="button"
-                        onClick={retryFailedResults}
-                        disabled={isGenerating}
-                        data-testid="retry-all-failed-btn"
-                        className="flex items-center gap-1.5 px-3 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
-                        title="Retry all failed model benchmarks"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 text-red-600 dark:text-red-400 ${isGenerating ? 'animate-spin' : ''}`} />
-                        <span>Retry Failed ({statusCounts.error})</span>
-                      </button>
+                    {statusCounts.error + statusCounts.pending + statusCounts.idle > 0 && (
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          disabled={isGenerating}
+                          data-testid="bulk-retry-menu-btn"
+                          className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+                          title="Bulk retry benchmark models by state"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 text-amber-600 dark:text-amber-400 ${isGenerating ? 'animate-spin' : ''}`} />
+                          <span>Bulk Retry</span>
+                        </button>
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-[#111622] rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 py-1.5 hidden group-hover:block z-50">
+                          {statusCounts.error > 0 && (
+                            <button onClick={() => bulkRetry('error')} className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">Retry Failed ({statusCounts.error})</button>
+                          )}
+                          {statusCounts.pending > 0 && (
+                            <button onClick={() => bulkRetry('pending')} className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40">Retry Pending ({statusCounts.pending})</button>
+                          )}
+                          {statusCounts.idle > 0 && (
+                            <button onClick={() => bulkRetry('idle')} className="w-full text-left px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800">Retry Idle ({statusCounts.idle})</button>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </h2>
 
@@ -3163,9 +3316,164 @@ export default function App() {
 
                           {result.status === 'success' && (
                             <div className="space-y-4">
-                              <div className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap font-medium">
-                                {result.output}
+                              {/* Display Mode Switcher: Formatted / Raw / .MD / HTML Preview */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-gray-800 text-xs">
+                                <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl font-semibold text-gray-600 dark:text-gray-300">
+                                  <button
+                                    type="button"
+                                    onClick={() => setResultDisplayModes(prev => ({ ...prev, [result.id]: 'formatted' }))}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                      (resultDisplayModes[result.id] || 'formatted') === 'formatted'
+                                        ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                        : 'hover:text-gray-900 dark:hover:text-gray-100'
+                                    }`}
+                                    title="View formatted output"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Formatted</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResultDisplayModes(prev => ({ ...prev, [result.id]: 'raw' }))}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                      resultDisplayModes[result.id] === 'raw'
+                                        ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                        : 'hover:text-gray-900 dark:hover:text-gray-100'
+                                    }`}
+                                    title="View raw text output"
+                                  >
+                                    <Code className="w-3.5 h-3.5" />
+                                    <span>Raw</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResultDisplayModes(prev => ({ ...prev, [result.id]: 'md' }))}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                      resultDisplayModes[result.id] === 'md'
+                                        ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                        : 'hover:text-gray-900 dark:hover:text-gray-100'
+                                    }`}
+                                    title="View Markdown (.md) source"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>.MD</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResultDisplayModes(prev => ({ ...prev, [result.id]: 'html' }))}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                      resultDisplayModes[result.id] === 'html'
+                                        ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                        : 'hover:text-gray-900 dark:hover:text-gray-100'
+                                    }`}
+                                    title="Live HTML preview framed snippet"
+                                  >
+                                    <Globe className="w-3.5 h-3.5" />
+                                    <span>HTML Preview</span>
+                                  </button>
+                                </div>
+
+                                <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
+                                  Mode: <strong className="uppercase text-indigo-600 dark:text-indigo-400">{resultDisplayModes[result.id] || 'formatted'}</strong>
+                                </div>
                               </div>
+
+                              {/* Output Render Container */}
+                              {(() => {
+                                const mode = resultDisplayModes[result.id] || 'formatted';
+                                const rawText = result.output;
+
+                                // Extract HTML snippet if markdown has ```html ... ``` or ```xml ... ``` or raw HTML
+                                let htmlContent = rawText;
+                                const htmlMatch = rawText.match(/```(?:html|htm|xml)?\s*([\s\S]*?)```/i);
+                                if (htmlMatch && htmlMatch[1]) {
+                                  htmlContent = htmlMatch[1].trim();
+                                }
+
+                                if (mode === 'raw') {
+                                  return (
+                                    <pre className="p-4 bg-gray-900 text-gray-100 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[450px]">
+                                      {rawText}
+                                    </pre>
+                                  );
+                                }
+
+                                if (mode === 'md') {
+                                  return (
+                                    <div className="relative">
+                                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-gray-800 text-gray-300 text-[10px] font-mono rounded">
+                                        markdown (.md)
+                                      </div>
+                                      <pre className="p-4 bg-gray-900 text-emerald-300 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-[450px]">
+                                        {rawText}
+                                      </pre>
+                                    </div>
+                                  );
+                                }
+
+                                if (mode === 'html') {
+                                  return (
+                                    <div className="space-y-3">
+                                      <div className="flex items-center justify-between text-xs font-mono text-gray-500 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <span className="flex items-center gap-1.5 font-bold text-indigo-600 dark:text-indigo-400">
+                                          <Globe className="w-3.5 h-3.5" /> Nicely Framed Live HTML Preview
+                                        </span>
+                                        <span>Rendered Sandbox</span>
+                                      </div>
+                                      <div className="p-4 bg-white dark:bg-white text-gray-900 rounded-xl border border-gray-200 shadow-inner overflow-auto min-h-[220px] max-h-[500px]">
+                                        <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                // Formatted default
+                                return (
+                                  <div className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap font-medium">
+                                    {rawText}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Prompt vs Completion Token Bar Chart */}
+                              {result.metrics && (
+                                <div className="p-3 bg-gray-50 dark:bg-[#161c28] rounded-xl border border-gray-200/80 dark:border-gray-800 space-y-2">
+                                  <div className="flex items-center justify-between text-xs font-mono">
+                                    <span className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-1.5">
+                                      <Hash className="w-3.5 h-3.5 text-indigo-500" />
+                                      Token Usage (Prompt vs Completion)
+                                    </span>
+                                    <span className="text-gray-500 dark:text-gray-400">
+                                      Total: <strong className="text-indigo-600 dark:text-indigo-400">{result.metrics.totalTokens}</strong> tokens
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Multi-segment Token Bar */}
+                                  <div className="h-3 w-full bg-gray-200 dark:bg-gray-700/60 rounded-full overflow-hidden flex shadow-inner">
+                                    <div 
+                                      style={{ width: `${Math.max(5, Math.round(((result.metrics.promptTokens || 0) / Math.max(1, result.metrics.totalTokens)) * 100))}%` }}
+                                      className="h-full bg-indigo-500 hover:bg-indigo-400 transition-colors"
+                                      title={`Prompt Tokens: ${result.metrics.promptTokens}`}
+                                    />
+                                    <div 
+                                      style={{ width: `${Math.max(5, Math.round(((result.metrics.completionTokens || 0) / Math.max(1, result.metrics.totalTokens)) * 100))}%` }}
+                                      className="h-full bg-emerald-500 hover:bg-emerald-400 transition-colors"
+                                      title={`Completion Tokens: ${result.metrics.completionTokens}`}
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-between text-[10px] font-mono text-gray-500 dark:text-gray-400">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
+                                      <span>Prompt: <strong>{result.metrics.promptTokens}</strong> ({Math.round(((result.metrics.promptTokens || 0) / Math.max(1, result.metrics.totalTokens)) * 100)}%)</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                                      <span>Completion: <strong>{result.metrics.completionTokens}</strong> ({Math.round(((result.metrics.completionTokens || 0) / Math.max(1, result.metrics.totalTokens)) * 100)}%)</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                               
                               {/* DevTools Network Timing & Metrics Component */}
                               <DevToolsTimingDetail result={result} />
@@ -3521,6 +3829,7 @@ export default function App() {
       <SupabaseConfigModal 
         isOpen={isSupabaseModalOpen} 
         onClose={() => setIsSupabaseModalOpen(false)} 
+        syncLogs={supabaseSyncLogs}
       />
 
       {/* Documentation & Reference Modal */}

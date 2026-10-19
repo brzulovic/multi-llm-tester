@@ -1243,9 +1243,9 @@ describe("LLM Multi-Tester App", () => {
     const retryBtn = screen.getByText("Retry Request");
     expect(retryBtn).toBeInTheDocument();
 
-    // Check retry all failed button in top bar
-    const retryAllBtn = screen.getByTestId("retry-all-failed-btn");
-    expect(retryAllBtn).toBeInTheDocument();
+    // Check bulk retry menu button in top bar
+    const bulkRetryBtn = screen.getByTestId("bulk-retry-menu-btn");
+    expect(bulkRetryBtn).toBeInTheDocument();
 
     // Click retry
     fireEvent.click(retryBtn);
