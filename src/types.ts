@@ -30,6 +30,9 @@ export interface ModelResult {
   hasSystemPrompt?: boolean;
   systemPrompt?: string;
   rating?: 'up' | 'down' | null;
+  audioUrl?: string;
+  audioBlobSize?: number;
+  audioMimeType?: string;
 }
 
 export interface HistoryEntry {

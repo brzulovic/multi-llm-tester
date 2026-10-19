@@ -64,7 +64,8 @@ import {
   Code,
   FileText,
   Eye,
-  Share2
+  Share2,
+  Volume2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ModelResult, HistoryEntry } from "./types";
@@ -366,8 +367,8 @@ export default function App() {
     });
   };
 
-  // Display mode per result: 'formatted' | 'raw' | 'md' | 'html'
-  const [resultDisplayModes, setResultDisplayModes] = useState<Record<string, 'formatted' | 'raw' | 'md' | 'html'>>({});
+  // Display mode per result: 'formatted' | 'raw' | 'md' | 'html' | 'audio'
+  const [resultDisplayModes, setResultDisplayModes] = useState<Record<string, 'formatted' | 'raw' | 'md' | 'html' | 'audio'>>({});
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
   const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<{
     status: 'idle' | 'syncing' | 'synced' | 'error';
@@ -1342,7 +1343,46 @@ export default function App() {
 
         if (endpoint.includes('/v1/audio/speech')) {
           const blob = await response.blob();
+          const audioObjectUrl = URL.createObjectURL(blob);
+          const mimeType = blob.type || contentType.split(';')[0].trim() || 'audio/mpeg';
           output = `Audio file received (${blob.size} bytes)`;
+
+          // Store audio data directly and set display mode to audio
+          const downloadMs2 = Math.max(1, performance.now() - downloadStart);
+          const durationMs2 = performance.now() - fetchStartTime;
+
+          setResults((prev) =>
+            prev.map((r) =>
+              r.id === id
+                ? {
+                    ...r,
+                    status: "success",
+                    statusCode,
+                    statusText,
+                    startTimeOffsetMs: queueMs,
+                    output,
+                    audioUrl: audioObjectUrl,
+                    audioBlobSize: blob.size,
+                    audioMimeType: mimeType,
+                    metrics: {
+                      promptTokens: 0,
+                      completionTokens: 0,
+                      totalTokens: 0,
+                      durationMs: durationMs2,
+                      tokensPerSecond: 0,
+                      ttfbMs,
+                      downloadMs: downloadMs2,
+                      queueMs,
+                      requestSentMs: Math.min(2, Math.round(ttfbMs * 0.05)),
+                    },
+                  }
+                : r
+            )
+          );
+
+          setResultDisplayModes((prev) => ({ ...prev, [id]: 'audio' }));
+          clearTimeout(timeoutTimer);
+          return; // Early return — audio result is fully handled
         } else {
           const data = await response.json();
           if (endpoint.includes('/embeddings')) {
@@ -3425,6 +3465,21 @@ export default function App() {
                                     <Globe className="w-3.5 h-3.5" />
                                     <span>HTML Preview</span>
                                   </button>
+                                  {result.audioUrl && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setResultDisplayModes(prev => ({ ...prev, [result.id]: 'audio' }))}
+                                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                        resultDisplayModes[result.id] === 'audio'
+                                          ? 'bg-white dark:bg-[#161c28] text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                                          : 'hover:text-gray-900 dark:hover:text-gray-100'
+                                      }`}
+                                      title="Audio player with download"
+                                    >
+                                      <Volume2 className="w-3.5 h-3.5" />
+                                      <span>Audio</span>
+                                    </button>
+                                  )}
                                 </div>
 
                                 <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
@@ -3480,6 +3535,74 @@ export default function App() {
                                         title="HTML Preview"
                                         sandbox="allow-scripts"
                                       />
+                                    </div>
+                                  );
+                                }
+
+                                if (mode === 'audio' && result.audioUrl) {
+                                  const sizeKB = result.audioBlobSize ? (result.audioBlobSize / 1024).toFixed(1) : '?';
+                                  const sizeMB = result.audioBlobSize && result.audioBlobSize > 1048576 ? (result.audioBlobSize / 1048576).toFixed(2) : null;
+                                  const mimeType = result.audioMimeType || 'audio/mpeg';
+                                  const ext = mimeType.includes('wav') ? 'wav' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('flac') ? 'flac' : mimeType.includes('aac') ? 'aac' : 'mp3';
+
+                                  return (
+                                    <div className="space-y-3">
+                                      {/* Audio Header Bar */}
+                                      <div className="flex items-center justify-between text-xs font-mono text-gray-500 bg-gray-100 dark:bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <span className="flex items-center gap-1.5 font-bold text-indigo-600 dark:text-indigo-400">
+                                          <Volume2 className="w-3.5 h-3.5" /> Audio Response Player
+                                        </span>
+                                        <span className="text-gray-400 dark:text-gray-500">
+                                          {mimeType} &middot; {sizeMB ? `${sizeMB} MB` : `${sizeKB} KB`}
+                                        </span>
+                                      </div>
+
+                                      {/* Player Card */}
+                                      <div className="bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-indigo-950/40 dark:via-[#161c28] dark:to-purple-950/30 rounded-xl border border-indigo-200/60 dark:border-indigo-800/50 p-5 space-y-4 shadow-sm">
+                                        {/* Waveform Visual Decoration */}
+                                        <div className="flex items-center justify-center gap-[3px] h-10 opacity-60">
+                                          {Array.from({ length: 40 }, (_, i) => {
+                                            const h = Math.max(6, Math.abs(Math.sin(i * 0.4 + 1.2) * 36) + Math.random() * 8);
+                                            return (
+                                              <div
+                                                key={i}
+                                                className="w-1 rounded-full bg-indigo-400 dark:bg-indigo-500"
+                                                style={{ height: `${h}px` }}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+
+                                        {/* Native Audio Element */}
+                                        <audio
+                                          controls
+                                          preload="metadata"
+                                          className="w-full rounded-lg"
+                                          style={{ outline: 'none' }}
+                                        >
+                                          <source src={result.audioUrl} type={mimeType} />
+                                          Your browser does not support the audio element.
+                                        </audio>
+
+                                        {/* Download & Info Row */}
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400 font-mono">
+                                            <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md font-bold uppercase">{ext}</span>
+                                            <span>{sizeMB ? `${sizeMB} MB` : `${sizeKB} KB`}</span>
+                                            <span>&middot;</span>
+                                            <span>{result.modelName}</span>
+                                          </div>
+                                          <a
+                                            href={result.audioUrl}
+                                            download={`tts-${result.modelName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.${ext}`}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                                            title="Download audio file"
+                                          >
+                                            <Download className="w-3.5 h-3.5" />
+                                            <span>Download .{ext}</span>
+                                          </a>
+                                        </div>
+                                      </div>
                                     </div>
                                   );
                                 }
