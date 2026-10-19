@@ -1349,6 +1349,42 @@ describe("LLM Multi-Tester App", () => {
     fireEvent.doubleClick(resizer);
     expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("380");
   });
+
+  it("renders right column header with fixed/sticky positioning when results are loaded", () => {
+    const sampleHistory = [
+      {
+        id: "hist-sticky-test",
+        timestamp: Date.now(),
+        prompt: "Sticky header test prompt",
+        results: [
+          {
+            id: "model-1",
+            modelName: "claude-3-5-sonnet",
+            status: "success",
+            output: "Output 1",
+            metrics: { durationMs: 1200, tokensPerSecond: 45, totalTokens: 100 }
+          }
+        ],
+        models: ["claude-3-5-sonnet"]
+      }
+    ];
+    localStorage.setItem("llm_tester_history", JSON.stringify(sampleHistory));
+
+    render(<App />);
+
+    // Load history
+    const historyTab = screen.getByTestId("tab-history");
+    fireEvent.click(historyTab);
+    const entryEl = screen.getByText("Sticky header test prompt");
+    fireEvent.click(entryEl);
+
+    // Verify right column toolbar has sticky classes
+    const toolbar = screen.getByTestId("results-header-toolbar");
+    expect(toolbar).toBeInTheDocument();
+    expect(toolbar.className).toContain("sticky");
+    expect(toolbar.className).toContain("top-[58px]");
+    expect(toolbar.className).toContain("z-20");
+  });
 });
 
 

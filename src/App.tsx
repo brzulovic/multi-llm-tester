@@ -1403,7 +1403,7 @@ export default function App() {
   return (
     <div className={`min-h-screen theme-${theme} ${theme === 'dark' || theme === 'sepia-dark' ? 'dark' : ''} bg-[#F8F9FA] dark:bg-[#0b0f17] text-[#1A1A1A] dark:text-[#E6EDF3] font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-200`}>
       {/* Header */}
-      <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111622] sticky top-0 z-20">
+      <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111622] sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200 dark:shadow-indigo-950">
@@ -2739,8 +2739,11 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-3.5">
-              {/* Results Top Bar & View Mode Switcher */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-gray-100 dark:border-gray-800">
+              {/* Results Top Bar & View Mode Switcher (Fixed / Sticky on Scroll) */}
+              <div 
+                data-testid="results-header-toolbar"
+                className="sticky top-[58px] z-20 bg-[#F8F9FA]/95 dark:bg-[#0b0f17]/95 backdrop-blur-md pt-2 pb-2.5 -mx-1 px-1 sm:px-2 rounded-2xl border-b border-gray-200/80 dark:border-gray-800 transition-colors shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+              >
                 <div className="flex flex-wrap items-center gap-2.5">
                   <h2 className="text-lg font-bold flex items-center gap-2 text-gray-900 dark:text-white">
                     {viewMode === "compare" ? "Comparison" : "Results"}
