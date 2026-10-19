@@ -1329,25 +1329,70 @@ describe("LLM Multi-Tester App", () => {
     expect((screen.getByPlaceholderText(/Enter your prompt/i) as HTMLTextAreaElement).value).toBe("Historical prompt for test");
   });
 
-  it("renders layout resizer handle and allows dragging left layout to expand", () => {
+  it("renders layout resizer handle and allows dragging left layout to expand and contract", () => {
     render(<App />);
 
     const resizer = screen.getByTestId("layout-resizer");
     expect(resizer).toBeInTheDocument();
 
-    // Start dragging
+    // Start dragging right to expand
     fireEvent.mouseDown(resizer, { clientX: 380 });
     // Move mouse to expand
-    fireEvent.mouseMove(window, { clientX: 500 });
+    fireEvent.mouseMove(window, { clientX: 520 });
     // Release
     fireEvent.mouseUp(window);
 
-    // Verify stored width
-    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("500");
+    // Verify stored width expanded
+    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("520");
+
+    // Start dragging left to contract
+    fireEvent.mouseDown(resizer, { clientX: 520 });
+    // Move mouse to contract
+    fireEvent.mouseMove(window, { clientX: 320 });
+    // Release
+    fireEvent.mouseUp(window);
+
+    // Verify stored width contracted
+    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("320");
+
+    // Test touch drag support
+    fireEvent.touchStart(resizer, { touches: [{ clientX: 320 }] });
+    fireEvent.touchMove(window, { touches: [{ clientX: 450 }] });
+    fireEvent.touchEnd(window);
+    expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("450");
 
     // Double click to reset
     fireEvent.doubleClick(resizer);
     expect(localStorage.getItem("llm_tester_sidebar_width")).toBe("380");
+  });
+
+  it("renders Target Messages under Target URL with trimmed one-line text, full curl command in title, and copy functionality", () => {
+    render(<App />);
+
+    // Verify Target URL is present
+    expect(screen.getByTestId("target-endpoint-display")).toBeInTheDocument();
+
+    // Verify Target Messages label and element are present
+    const messagesDisplay = screen.getByTestId("target-messages-display");
+    expect(messagesDisplay).toBeInTheDocument();
+
+    // Verify one-line trimmed text contains user messages
+    expect(messagesDisplay.textContent).toContain("Describe all your capabilities");
+    expect(messagesDisplay.className).toContain("truncate");
+    expect(messagesDisplay.className).toContain("whitespace-nowrap");
+
+    // Verify title attribute contains full curl command and messages content
+    const titleAttr = messagesDisplay.getAttribute("title");
+    expect(titleAttr).toBeTruthy();
+    expect(titleAttr).toContain("curl -X POST");
+    expect(titleAttr).toContain("Content-Type: application/json");
+    expect(titleAttr).toContain("-d '");
+    expect(titleAttr).toContain("messages");
+
+    // Verify copy button exists and can be clicked
+    const copyBtn = screen.getByTestId("copy-messages-btn");
+    expect(copyBtn).toBeInTheDocument();
+    fireEvent.click(copyBtn);
   });
 
   it("renders right column header with fixed/sticky positioning when results are loaded", () => {

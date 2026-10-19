@@ -170,6 +170,7 @@ export default function App() {
   const [newApiName, setNewApiName] = useState<string>("");
   const [newApiUrl, setNewApiUrl] = useState<string>("");
   const [copiedEndpoint, setCopiedEndpoint] = useState<boolean>(false);
+  const [copiedTargetMessages, setCopiedTargetMessages] = useState<boolean>(false);
 
   const endpoint = buildApiUrl(proxyBaseUrl, endpointType, customEndpointPath);
 
@@ -275,7 +276,7 @@ export default function App() {
       const saved = localStorage.getItem("llm_tester_sidebar_width");
       if (saved) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 260 && parsed <= 850) {
+        if (!isNaN(parsed) && parsed >= 260 && parsed <= 1200) {
           return parsed;
         }
       }
@@ -307,23 +308,57 @@ export default function App() {
     dragStartXRef.current = e.clientX;
     startWidthRef.current = sidebarWidth;
 
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
       moveEvent.preventDefault();
       const deltaX = moveEvent.clientX - dragStartXRef.current;
       const minWidth = 260;
-      const maxWidth = Math.min(850, Math.floor(window.innerWidth * 0.65));
-      const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidthRef.current + deltaX));
+      const maxWidth = Math.max(minWidth, Math.min(1000, window.innerWidth - 300));
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.round(startWidthRef.current + deltaX)));
       setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
       setIsDraggingSidebar(false);
+      if (typeof document !== "undefined") {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleSidebarTouchStart = (e: React.TouchEvent) => {
+    if (!e.touches[0]) return;
+    setIsDraggingSidebar(true);
+    dragStartXRef.current = e.touches[0].clientX;
+    startWidthRef.current = sidebarWidth;
+
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      if (!moveEvent.touches[0]) return;
+      const deltaX = moveEvent.touches[0].clientX - dragStartXRef.current;
+      const minWidth = 260;
+      const maxWidth = Math.max(minWidth, Math.min(1000, window.innerWidth - 300));
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, Math.round(startWidthRef.current + deltaX)));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleTouchEnd = () => {
+      setIsDraggingSidebar(false);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd);
   };
 
   useEffect(() => {
@@ -365,6 +400,62 @@ export default function App() {
         return [...prev, model];
       }
     });
+  };
+
+  const targetMessages = React.useMemo(() => {
+    const willInject = enableSystemPrompt && customSystemPrompt.trim().length > 0;
+    const msgs: Array<{ role: string; content: string }> = [];
+    if (willInject) {
+      msgs.push({ role: "system", content: customSystemPrompt.trim() });
+    }
+    msgs.push({ role: "user", content: prompt });
+    return msgs;
+  }, [enableSystemPrompt, customSystemPrompt, prompt]);
+
+  const targetMessagesOneLine = React.useMemo(() => {
+    const isEmbeddings = endpoint.includes('/embeddings');
+    const isAudio = endpoint.includes('/v1/audio/speech');
+    if (isEmbeddings || isAudio) {
+      return JSON.stringify({ input: prompt.trim() }).trim();
+    }
+    return JSON.stringify(targetMessages).trim();
+  }, [endpoint, prompt, targetMessages]);
+
+  const curlMessageContent = React.useMemo(() => {
+    const isEmbeddings = endpoint.includes('/embeddings');
+    const isAudio = endpoint.includes('/v1/audio/speech');
+    const model = configuredModels[0] || "model-name";
+
+    let bodyPayload: Record<string, any> = { model };
+    if (isEmbeddings) {
+      bodyPayload.input = prompt;
+    } else if (isAudio) {
+      bodyPayload.input = prompt;
+      bodyPayload.voice = 'alloy';
+    } else {
+      bodyPayload.messages = targetMessages;
+      if (streamResponse) {
+        bodyPayload.stream = true;
+      }
+    }
+
+    const headersList: string[] = ['Content-Type: application/json'];
+    if (customHeaders.trim()) {
+      customHeaders.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed) headersList.push(trimmed);
+      });
+    }
+
+    const headersCurl = headersList.map(h => `  -H "${h.replace(/"/g, '\\"')}"`).join(" \\\n");
+
+    return `curl -X POST "${endpoint}" \\\n${headersCurl} \\\n  -d '${JSON.stringify(bodyPayload)}'`;
+  }, [endpoint, customHeaders, configuredModels, prompt, targetMessages, streamResponse]);
+
+  const copyTargetMessages = () => {
+    navigator.clipboard?.writeText(curlMessageContent);
+    setCopiedTargetMessages(true);
+    setTimeout(() => setCopiedTargetMessages(false), 2000);
   };
 
   // Display mode per result: 'formatted' | 'raw' | 'md' | 'html' | 'audio'
@@ -1746,7 +1837,7 @@ export default function App() {
         {showLeftColumn && (
         <div 
           style={{ width: isLgScreen ? `${sidebarWidth}px` : '100%' }}
-          className="space-y-3 shrink-0 transition-[width] duration-75 lg:pr-2.5 w-full"
+          className={`space-y-3 shrink-0 ${isDraggingSidebar ? '' : 'transition-[width] duration-75'} lg:pr-2.5 w-full`}
         >
           {/* Column View Section Switcher / Navigation */}
           <div className="bg-white/95 dark:bg-[#111622]/95 rounded-2xl p-1 shadow-xs border border-gray-200/80 dark:border-gray-800 flex items-center gap-1 sticky top-[58px] z-10 backdrop-blur-sm">
@@ -2048,6 +2139,30 @@ export default function App() {
                             data-testid="copy-endpoint-btn"
                           >
                             {copiedEndpoint ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+
+                        {/* Target Messages Preview */}
+                        <div className="flex items-center justify-between p-2 rounded-xl bg-gray-100/80 dark:bg-[#161c28]/80 border border-gray-200/60 dark:border-gray-700/60 text-xs mt-1.5">
+                          <div className="flex items-center gap-1.5 overflow-hidden min-w-0 mr-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 shrink-0">Target Messages:</span>
+                            <span 
+                              className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 truncate whitespace-nowrap" 
+                              title={curlMessageContent} 
+                              data-testid="target-messages-display"
+                            >
+                              {targetMessagesOneLine}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={copyTargetMessages}
+                            className="shrink-0 p-1 rounded-md text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+                            title="Copy full target messages curl command"
+                            aria-label="Copy full target messages curl command"
+                            data-testid="copy-messages-btn"
+                          >
+                            {copiedTargetMessages ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                           </button>
                         </div>
                       </div>
@@ -2921,27 +3036,42 @@ export default function App() {
           aria-orientation="vertical"
           data-testid="layout-resizer"
           onMouseDown={handleSidebarDragStart}
+          onTouchStart={handleSidebarTouchStart}
           onDoubleClick={() => setSidebarWidth(380)}
           title="Drag to resize sidebar width (Double click to reset to default 380px)"
-          className={`hidden lg:flex flex-col items-center justify-center w-3.5 hover:w-3.5 cursor-col-resize self-stretch shrink-0 group transition-colors select-none z-10 px-0.5 relative ${
+          className={`hidden lg:flex flex-col items-center justify-start w-3.5 hover:w-3.5 cursor-col-resize self-stretch shrink-0 group transition-colors select-none z-10 px-0.5 relative ${
             isDraggingSidebar ? 'bg-indigo-500/25' : 'hover:bg-indigo-500/10'
           }`}
         >
-          <div className={`w-1 h-14 rounded-full transition-colors flex items-center justify-center ${
-            isDraggingSidebar ? 'bg-indigo-600 dark:bg-indigo-400' : 'bg-gray-300 dark:bg-gray-700 group-hover:bg-indigo-500 dark:group-hover:bg-indigo-400'
-          }`}>
-            <GripVertical className="w-2.5 h-2.5 text-white opacity-0 group-hover:opacity-100" />
-          </div>
-          {isDraggingSidebar && (
-            <div className="absolute top-1/2 -translate-y-1/2 left-4 bg-indigo-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-30 whitespace-nowrap">
-              {sidebarWidth}px
+          {/* Subtle center line */}
+          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] bg-gray-200/80 dark:bg-gray-800/80 group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 transition-colors pointer-events-none" />
+
+          {/* Sticky Grab Pill Handle */}
+          <div className="sticky top-[180px] z-10 flex flex-col items-center my-4">
+            <div className={`w-1.5 h-16 rounded-full transition-all flex items-center justify-center shadow-xs ${
+              isDraggingSidebar ? 'bg-indigo-600 dark:bg-indigo-400 scale-110' : 'bg-gray-300 dark:bg-gray-700 group-hover:bg-indigo-500 dark:group-hover:bg-indigo-400'
+            }`}>
+              <GripVertical className="w-2.5 h-2.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-          )}
+            {isDraggingSidebar && (
+              <div className="absolute top-1/2 -translate-y-1/2 left-4 bg-indigo-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-md pointer-events-none z-30 whitespace-nowrap">
+                {sidebarWidth}px
+              </div>
+            )}
+          </div>
         </div>
       )}
 
+      {/* Global Transparent Drag Shield */}
+      {isDraggingSidebar && (
+        <div 
+          className="fixed inset-0 z-50 cursor-col-resize select-none bg-transparent"
+          style={{ pointerEvents: 'auto' }}
+        />
+      )}
+
         {/* Results Display */}
-        <div id="section-results" className="flex-1 min-w-0 w-full transition-all lg:pl-2.5">
+        <div id="section-results" className={`flex-1 min-w-0 w-full ${isDraggingSidebar ? '' : 'transition-all'} lg:pl-2.5`}>
           {results.length === 0 && viewMode !== "compare" && viewMode !== "graph" ? (
             <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-12 bg-white dark:bg-[#111622] rounded-3xl border border-dashed border-gray-200 dark:border-gray-800">
               <div className="w-16 h-16 bg-gray-50 dark:bg-[#0b0f17] rounded-2xl flex items-center justify-center mb-4">
