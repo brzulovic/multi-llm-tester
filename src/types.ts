@@ -42,5 +42,11 @@ export interface HistoryEntry {
   models?: string[];
   systemPrompt?: string;
   systemPromptTargetModels?: string[];
+  isParallel: boolean;
+  parallelCount: number;
+  streamResponse: boolean;
+  timeoutSeconds: number;
+  enableSystemPrompt: boolean;
+  systemPromptMode: 'specific' | 'all';
 }
 

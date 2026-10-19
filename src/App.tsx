@@ -823,6 +823,13 @@ export default function App() {
     if (entry.systemPromptTargetModels && entry.systemPromptTargetModels.length > 0) {
       setSystemPromptTargetModels(entry.systemPromptTargetModels);
     }
+    
+    setIsParallel(entry.isParallel ?? false);
+    setParallelCount(entry.parallelCount ?? 2);
+    setStreamResponse(entry.streamResponse ?? true);
+    setTimeoutSeconds(entry.timeoutSeconds ?? 300);
+    setEnableSystemPrompt(entry.enableSystemPrompt ?? false);
+    setSystemPromptMode(entry.systemPromptMode ?? 'specific');
 
     setResults(entry.results);
     goToSection("prompt");
@@ -891,6 +898,12 @@ export default function App() {
         models: results.map(r => r.modelName),
         systemPrompt: enableSystemPrompt ? customSystemPrompt : undefined,
         systemPromptTargetModels: enableSystemPrompt ? systemPromptTargetModels : undefined,
+        isParallel,
+        parallelCount,
+        streamResponse,
+        timeoutSeconds,
+        enableSystemPrompt,
+        systemPromptMode,
       };
       
       setHistory(prev => {
@@ -1063,6 +1076,11 @@ export default function App() {
       customSystemPrompt,
       isParallel,
       parallelCount,
+      streamResponse,
+      timeoutSeconds,
+      enableSystemPrompt,
+      systemPromptMode,
+      systemPromptTargetModels,
       results: results.filter(r => r.status === 'success'),
     };
     try {
@@ -1120,15 +1138,23 @@ export default function App() {
       }
       messages.push({ role: "user", content: prompt });
 
-      const bodyPayload: Record<string, any> = {
+      let bodyPayload: Record<string, any> = {
         model: modelName,
-        messages,
-        stream: streamResponse,
-        timeout: timeoutSeconds,
-        request_timeout: timeoutSeconds,
       };
 
-      if (streamResponse) {
+      if (endpoint.includes('/embeddings')) {
+        bodyPayload.input = prompt;
+      } else if (endpoint.includes('/v1/audio/speech')) {
+        bodyPayload.input = prompt;
+        bodyPayload.voice = 'alloy'; // Default voice
+      } else {
+        bodyPayload.messages = messages;
+        bodyPayload.stream = streamResponse;
+        bodyPayload.timeout = timeoutSeconds;
+        bodyPayload.request_timeout = timeoutSeconds;
+      }
+
+      if (streamResponse && !endpoint.includes('/embeddings') && !endpoint.includes('/v1/audio/speech')) {
         bodyPayload.stream_options = { include_usage: true };
       }
 
@@ -1294,19 +1320,35 @@ export default function App() {
           )
         );
       } else {
-        // Standard JSON response
+        // Standard JSON or Binary response
         const downloadStart = performance.now();
-        const data = await response.json();
+        
+        let output = "";
+        let promptTokens = 0;
+        let completionTokens = 0;
+        let totalTokens = 0;
+
+        if (endpoint.includes('/v1/audio/speech')) {
+          const blob = await response.blob();
+          output = `Audio file received (${blob.size} bytes)`;
+        } else {
+          const data = await response.json();
+          if (endpoint.includes('/embeddings')) {
+            output = JSON.stringify(data.data?.[0]?.embedding || "No embedding found");
+            promptTokens = data.usage?.prompt_tokens || 0;
+            totalTokens = data.usage?.total_tokens || promptTokens;
+          } else {
+            output = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "No output received";
+            promptTokens = data.usage?.prompt_tokens || 0;
+            completionTokens = data.usage?.completion_tokens || 0;
+            totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
+          }
+        }
+
         const downloadEnd = performance.now();
         const downloadMs = Math.max(1, downloadEnd - downloadStart);
         const durationMs = downloadEnd - fetchStartTime;
-
-        const output = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "No output received";
-        const usage = data.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
         
-        const completionTokens = usage.completion_tokens || 0;
-        const promptTokens = usage.prompt_tokens || 0;
-        const totalTokens = usage.total_tokens || (promptTokens + completionTokens);
         const tokensPerSecond = completionTokens > 0 ? (completionTokens / (durationMs / 1000)) : 0;
 
         setResults((prev) =>
