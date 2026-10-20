@@ -289,14 +289,14 @@ export default function App() {
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const [isLgScreen, setIsLgScreen] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return window.innerWidth >= 1280;
+      return window.innerWidth >= 1024;
     }
     return true;
   });
 
   useEffect(() => {
     const handleResize = () => {
-      setIsLgScreen(window.innerWidth >= 1280);
+      setIsLgScreen(window.innerWidth >= 1024);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
