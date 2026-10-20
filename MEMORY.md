@@ -81,3 +81,63 @@ Recent commits indicate active development on:
 - Advanced prompt engineering features (system prompt injection)
 - Improved data visualization and comparison tools
 - Better persistence and sharing capabilities
+
+## Proposed Ideas for Future Development:
+
+### 1. **LLM Benchmark Skill** (Agent Skill)
+Create a reusable skill that encapsulates the benchmarking workflow:
+- Automated model discovery from endpoints
+- Configurable test suites (Nerdy Kings, Classic, Custom)
+- Parallel/sequential execution with concurrency control
+- Real-time metrics collection (TTFB, tokens/sec, latency)
+- Results export (JSON, CSV, Supabase)
+- Comparison and diff analysis
+
+### 2. **Prompt Engineering Workflow Skill**
+- Template-based prompt construction
+- System prompt injection strategies
+- A/B testing framework for prompt variants
+- Token optimization suggestions
+- Prompt versioning and history
+
+### 3. **Model Comparison & Analysis Skill**
+- Side-by-side output comparison with token-level diff
+- Capability matrix visualization (XY graphs)
+- Performance regression detection
+- Statistical significance testing
+- Automated report generation
+
+### 4. **Supabase Integration Skill**
+- Schema management for benchmark data
+- Automated sync with conflict resolution
+- Query builders for common analytics
+- Dashboard data preparation
+- Migration utilities
+
+### 5. **Multi-Provider Configuration Skill**
+- Unified config for OpenAI, Ollama, vLLM, Groq, LiteLLM
+- Endpoint health checking and failover
+- Model capability detection and caching
+- Cost estimation per provider/model
+- Rate limit handling
+
+### 6. **Export & Reporting Skill**
+- Multiple export formats (JSON, CSV, HTML, PDF, Markdown)
+- Customizable report templates
+- Scheduled benchmark runs
+- CI/CD integration hooks
+- Webhook notifications
+
+### 7. **Advanced Visualization Skill**
+- Interactive waterfall charts (D3/Chart.js)
+- Real-time streaming token visualization
+- Model capability radar charts
+- Cost vs performance scatter plots
+- Historical trend analysis
+
+### 8. **Testing & Validation Skill**
+- Automated regression test suite
+- Model output validation (JSON schema, format checks)
+- Performance benchmarks with baselines
+- Chaos testing for endpoint resilience
+- Load testing utilities
