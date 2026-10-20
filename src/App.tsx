@@ -289,14 +289,14 @@ export default function App() {
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const [isLgScreen, setIsLgScreen] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return window.innerWidth >= 1024;
+      return window.innerWidth >= 1280;
     }
     return true;
   });
 
   useEffect(() => {
     const handleResize = () => {
-      setIsLgScreen(window.innerWidth >= 1024);
+      setIsLgScreen(window.innerWidth >= 1280);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -1672,7 +1672,7 @@ export default function App() {
     <div className={`min-h-screen theme-${theme} ${theme === 'dark' || theme === 'sepia-dark' ? 'dark' : ''} bg-[#F8F9FA] dark:bg-[#0b0f17] text-[#1A1A1A] dark:text-[#E6EDF3] font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-200`}>
       {/* Header */}
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#111622] sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between">
+        <div className="max-w-[1024px] mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200 dark:shadow-indigo-950">
               <Layers className="text-white w-5 h-5" />
@@ -1829,7 +1829,7 @@ export default function App() {
 
       <main 
         ref={mainContainerRef}
-        className={`max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col lg:flex-row gap-4 lg:gap-0 items-start relative ${
+        className={`max-w-[1280px] mx-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col lg:flex-row gap-4 lg:gap-0 items-start relative ${
           isDraggingSidebar ? 'cursor-col-resize select-none' : ''
         }`}
       >

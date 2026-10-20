@@ -19,7 +19,6 @@ FROM node:22-slim AS production
 WORKDIR /app
 COPY --from=base /app/dist ./dist
 COPY --from=base /app/package.json ./
-RUN npm install --omit=dev
 
 # Install a simple static server
 RUN npm install -g serve
