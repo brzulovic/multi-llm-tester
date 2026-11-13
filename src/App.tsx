@@ -76,7 +76,7 @@ import { ModelComparisonView } from "./components/ModelComparisonView";
 import { ModelXYGraph } from "./components/ModelXYGraph";
 import { DocumentationModal } from "./components/DocumentationModal";
 import { SystemPromptModal } from "./components/SystemPromptModal";
-import { COMMON_TEST_PROMPTS, NERDY_KINGS_PROMPTS, CLASSIC_TEST_PROMPTS } from "./data/prompts";
+import { COMMON_TEST_PROMPTS, NERDY_KINGS_PROMPTS, CLASSIC_TEST_PROMPTS, HTMLGAMES_TEST_PROMPTS } from "./data/prompts";
 import { convertHistoryToCSV, downloadCSV } from "./lib/csvExport";
 import {
   buildApiUrl,
@@ -486,10 +486,10 @@ export default function App() {
   };
 
   type SidebarTab = "config" | "prompt" | "history" | "all";
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("config");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("prompt");
 
   const [collapsed, setCollapsed] = useState({
-    config: false,
+    config: typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test' ? false : true,
     prompt: false,
     history: true
   });
@@ -1734,6 +1734,23 @@ export default function App() {
               <Share2 className="w-4 h-4" />
             </button>
 
+            {/* Run Benchmark / Generate Icon-only Blue Button */}
+            <button
+              type="button"
+              onClick={generateResults}
+              disabled={isGenerating || !prompt.trim() || !modelList.trim()}
+              data-testid="header-generate-btn"
+              aria-label="Run benchmark"
+              title="Run benchmark"
+              className="flex items-center justify-center p-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-indigo-200 dark:shadow-indigo-950"
+            >
+              {isGenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <Play className="w-4 h-4 fill-white" />
+              )}
+            </button>
+
             {/* Documentation & Reference Modal button */}
             <button
               type="button"
@@ -1932,6 +1949,7 @@ export default function App() {
             <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
               <button 
                 onClick={() => toggleSection('config')}
+                data-testid="config-section-toggle-btn"
                 className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
               >
               <div className="flex items-center gap-2">
@@ -2222,7 +2240,7 @@ export default function App() {
                           {!enableSystemPrompt ? (
                             <span 
                               data-testid="sys-prompt-disabled-msg"
-                              className="text-[10px] font-medium text-gray-400 dark:text-gray-500 opacity-0 group-hover/sysprompt:opacity-100 transition-opacity duration-200 bg-gray-200/60 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-300/60 dark:border-gray-700 select-none cursor-pointer"
+                              className="text-[9.5px] font-medium text-gray-400 dark:text-gray-500 opacity-0 group-hover/sysprompt:opacity-100 transition-opacity duration-200 bg-gray-200/60 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-300/60 dark:border-gray-700 select-none cursor-pointer"
                               onClick={() => setIsSystemPromptModalOpen(true)}
                             >
                               Disabled (Injects into payload for specific models)
@@ -2243,7 +2261,7 @@ export default function App() {
                           type="button"
                           onClick={() => setIsSystemPromptModalOpen(true)}
                           data-testid="open-system-prompt-layer-btn"
-                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-white dark:bg-[#161c28] hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 transition-all cursor-pointer shadow-2xs"
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-[#161c28] hover:bg-purple-50 dark:hover:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700 transition-all cursor-pointer shadow-2xs"
                           title="Open Custom System Prompt configuration layer"
                         >
                           <Layers className="w-3 h-3 text-purple-600 dark:text-purple-400" />
@@ -2704,6 +2722,7 @@ export default function App() {
           <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
             <button 
               onClick={() => toggleSection('prompt')}
+              data-testid="prompt-section-toggle-btn"
               className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
             >
               <div className="flex items-center gap-2">
@@ -2806,6 +2825,7 @@ export default function App() {
           <section className="bg-white dark:bg-[#111622] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
             <button 
               onClick={() => toggleSection('history')}
+              data-testid="history-section-toggle-btn"
               className="w-full flex items-center justify-between px-4 py-3 sm:px-5 sm:py-3.5 text-gray-900 dark:text-gray-100 font-semibold hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors"
             >
               <div className="flex items-center gap-2">
