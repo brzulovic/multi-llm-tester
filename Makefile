@@ -8,6 +8,9 @@ DATABASE_URL ?= $(SUPABASE_DB_URL)
 
 .PHONY: help build run up down stop clean logs shell dev test lint supabase-init supabase-schema supabase-verify
 
+restart: down up
+
+
 help:
 	@echo "Available commands:"
 	@echo "  --- Application Development ---"

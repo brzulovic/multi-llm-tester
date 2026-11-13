@@ -232,11 +232,40 @@ export const CLASSIC_TEST_PROMPTS: PromptPreset[] = [
     "title": "Educational Advancement",
     "subtitle": "Plan for higher education.",
     "category": "Classic Benchmarks",
-    "prompt": "Plan for higher education: create a structured roadmap for an undergraduate preparing to apply for competitive master’s programs in Artificial Intelligence."
+    "prompt": "Plan for higher education: create a structured roadmap for an undergraduate preparing to apply for competitive master’s programsG in Artificial Intelligence."
   }
 ];
 
+
+export const HTMLGAMES_TEST_PROMPTS: PromptPreset[] = [
+  {
+    "id": "runner",
+"title": "Le endless runner façon Flappy Bird",
+"subtitle":"Le grand classique du jeu mobile : simple, addictif, parfait pour un premier essai.",
+
+"prompt": "Crée un jeu type Flappy Bird dans un seul fichier HTML autonome (HTML, CSS et JS inclus, aucune ressource externe). Format portrait 9:16. Le personnage monte à chaque tap ou clic et retombe avec la gravité. Des obstacles défilent de droite à gauche avec un passage à franchir. Score +1 par obstacle franchi, affiché en haut. Collision = écran de fin avec le score et un bouton « Rejouer ». Ajoute un petit effet visuel au passage réussi et une légère accélération au fil du temps. Le jeu démarre au premier tap."
+  },{
+"id": "clicker",
+"title": "Le clicker",
+"subtitle":"Zéro réflexe requis, une progression satisfaisante, idéal pour tester une idée d'univers.",
+"prompt": "Crée un jeu clicker dans un seul fichier HTML autonome (aucune ressource externe). Format portrait 9:16. Un gros bouton central : chaque tap ajoute des points. Propose trois améliorations achetables avec les points (par exemple clic automatique, multiplicateur, bonus), listées sous le bouton. Anime un petit « +1 » flottant et un rebond à chaque clic. Score bien visible en haut, conservé en mémoire pendant la session."
+  },{
+"id": "arkanoid",
+"title": "Le casse-brique",
+"subtitle":"Rythmé, visuel, satisfaisant, parfait pour montrer un peu de game feel.",
+"prompt": "Crée un casse-brique (breakout) dans un seul fichier HTML autonome. Format portrait 9:16. Raquette en bas contrôlée au doigt et à la souris, balle qui rebondit, rangées de briques en haut. Score +10 par brique, affiché en haut. Trois vies : perdre la balle enlève une vie, zéro vie = écran de fin avec bouton « Rejouer ». Victoire quand toutes les briques sont cassées. Ajoute un effet à la casse et une balle qui accélère légèrement."
+  },{
+"id": "obstacle.dodger",
+"title": "L'esquive d'obstacles",
+"subtitle": "Une survie simple, tendue, à la difficulté qui monte toute seule.",
+"prompt": "Crée un jeu d'arcade d'esquive dans un seul fichier HTML autonome. Format portrait 9:16. Un personnage en bas se déplace latéralement au doigt et à la souris, des obstacles tombent du haut à vitesse croissante. Le score est le temps de survie, affiché en haut. Collision = écran de fin avec le score et un bouton « Rejouer ». Ajoute des particules à la collision et une légère secousse d'écran."
+  }
+  ]
+
+
+
 export const COMMON_TEST_PROMPTS: PromptPreset[] = [
   ...NERDY_KINGS_PROMPTS,
+  ...HTMLGAMES_TEST_PROMPTS, 
   ...CLASSIC_TEST_PROMPTS
 ];
